@@ -13,6 +13,11 @@ const {
   getPatientAppointmentsController,
   getVerifiedDoctorsController,
 } = require("./controllers");
+const {
+  bookAppointmentValidator,
+  getAvailableSlotsValidator,
+  applyDoctorRoleValidator,
+} = require("./dto");
 
 const patientsRouter = express.Router();
 
@@ -28,6 +33,7 @@ patientsRouter.post(
   "/apply-doctor-role",
   validateLoggedInUserMiddleware,
   validatePatientRole,
+  applyDoctorRoleValidator,
   applyForDoctorRoleController,
 );
 
@@ -36,6 +42,7 @@ patientsRouter.get(
   "/appointments/available-slots",
   validateLoggedInUserMiddleware,
   validatePatientRole,
+  getAvailableSlotsValidator,
   getAvailableSlotsController,
 );
 
@@ -44,6 +51,7 @@ patientsRouter.post(
   "/appointments/book",
   validateLoggedInUserMiddleware,
   validatePatientRole,
+  bookAppointmentValidator,
   bookAppointmentController,
 );
 

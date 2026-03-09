@@ -10,6 +10,7 @@ const {
   getConversationController,
   getPatientConversationsController,
 } = require("./controllers");
+const { sendMessageValidator, endConversationValidator } = require("./dto");
 
 const chatRouter = express.Router();
 
@@ -26,6 +27,7 @@ chatRouter.post(
   "/message",
   validateLoggedInUserMiddleware,
   validatePatientRole,
+  sendMessageValidator,
   sendMessageController,
 );
 
@@ -34,6 +36,7 @@ chatRouter.post(
   "/end",
   validateLoggedInUserMiddleware,
   validatePatientRole,
+  endConversationValidator,
   endConversationController,
 );
 

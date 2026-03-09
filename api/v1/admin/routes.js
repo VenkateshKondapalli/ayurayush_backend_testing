@@ -15,6 +15,7 @@ const {
   setDoctorAvailabilityController,
   offlineBookAppointmentController,
 } = require("./controllers");
+const { rejectAppointmentValidator, offlineBookValidator } = require("./dto");
 
 const adminsRouter = express.Router();
 
@@ -46,7 +47,6 @@ adminsRouter.post(
   rejectDoctorApplicationController,
 );
 
-// Get pending normal appointments
 adminsRouter.get(
   "/appointments/pending",
   validateLoggedInUserMiddleware,
@@ -54,7 +54,6 @@ adminsRouter.get(
   getpendingDoctorApplicationsController,
 );
 
-// Get emergency appointments
 adminsRouter.get(
   "/appointments/emergency",
   validateLoggedInUserMiddleware,
@@ -62,7 +61,6 @@ adminsRouter.get(
   getEmergencyAppointmentsController,
 );
 
-// Approve appointment (with optional edits)
 adminsRouter.post(
   "/appointments/:appointmentId/approve",
   validateLoggedInUserMiddleware,
@@ -70,15 +68,14 @@ adminsRouter.post(
   approveAppointmentController,
 );
 
-// Reject appointment
 adminsRouter.post(
   "/appointments/:appointmentId/reject",
   validateLoggedInUserMiddleware,
   validateIsAdminMiddleware,
+  rejectAppointmentValidator,
   rejectAppointmentController,
 );
 
-// Set doctor availability
 adminsRouter.put(
   "/doctors/:doctorId/availability",
   validateLoggedInUserMiddleware,
@@ -86,14 +83,12 @@ adminsRouter.put(
   setDoctorAvailabilityController,
 );
 
-// Offline booking (walk-in patient)
 adminsRouter.post(
   "/appointments/offline-book",
   validateLoggedInUserMiddleware,
   validateIsAdminMiddleware,
+  offlineBookValidator,
   offlineBookAppointmentController,
 );
 
-module.exports = {
-  adminsRouter,
-};
+module.exports = { adminsRouter };
