@@ -51,4 +51,36 @@ const checkEmailExists = async (email) => {
   return !!user;
 };
 
-module.exports = { signupUser, loginUser, checkEmailExists };
+const forgotPassword = async (email) => {
+  const user = await UserModel.findOne({ email });
+  if (!user) {
+    const err = new Error("No account found with this email");
+    err.statusCode = 404;
+    throw err;
+  }
+  // OTP sending is handled by the OTP service (reused from signup flow)
+  // The controller will call sendOtp after this check
+  return { email: user.email };
+};
+
+const resetPassword = async (email, newPassword) => {
+  const user = await UserModel.findOne({ email });
+  if (!user) {
+    const err = new Error("No account found with this email");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  user.password = newPassword;
+  await user.save(); // pre-save hook will hash the password
+
+  return { email: user.email };
+};
+
+module.exports = {
+  signupUser,
+  loginUser,
+  checkEmailExists,
+  forgotPassword,
+  resetPassword,
+};

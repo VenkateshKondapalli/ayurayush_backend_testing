@@ -2,7 +2,11 @@ const { AppointmentModel } = require("../../../models/appointmentSchema");
 const { ChatHistoryModel } = require("../../../models/chatHistorySchema");
 const { DoctorModel } = require("../../../models/doctorSchema");
 const { PatientModel } = require("../../../models/patientSchema");
-const { calculateAge } = require("../../../utils/helpers");
+const { UserModel } = require("../../../models/userSchema");
+const { calculateAge, parsePagination } = require("../../../utils/helpers");
+const {
+  notifyAppointmentCompleted,
+} = require("../../../utils/appointmentNotifications");
 
 const getDoctorDashboard = async (userId) => {
   let doctor = await DoctorModel.findOne({ userId });
@@ -26,7 +30,14 @@ const getDoctorDashboard = async (userId) => {
   };
 };
 
-const getDoctorAppointments = async (userId, { status, date }) => {
+const getDoctorAppointments = async (
+  userId,
+  { status, date, page: rawPage, limit: rawLimit },
+) => {
+  const { page, limit, skip } = parsePagination({
+    page: rawPage,
+    limit: rawLimit,
+  });
   const query = {
     doctorId: userId,
     status: { $nin: ["rejected"] },
@@ -40,9 +51,14 @@ const getDoctorAppointments = async (userId, { status, date }) => {
     };
   }
 
-  const appointments = await AppointmentModel.find(query)
-    .populate("patientId", "name email phone gender dob profilePhoto")
-    .sort({ date: 1, timeSlot: 1 });
+  const [appointments, totalCount] = await Promise.all([
+    AppointmentModel.find(query)
+      .populate("patientId", "name email phone gender dob profilePhoto")
+      .sort({ date: 1, timeSlot: 1 })
+      .skip(skip)
+      .limit(limit),
+    AppointmentModel.countDocuments(query),
+  ]);
 
   // Batch fetch all patient profiles in one query instead of N+1
   const patientUserIds = appointments.map((apt) => apt.patientId._id);
@@ -90,7 +106,9 @@ const getDoctorAppointments = async (userId, { status, date }) => {
   );
 
   return {
-    totalCount: appointmentsWithDetails.length,
+    totalCount,
+    page,
+    totalPages: Math.ceil(totalCount / limit),
     emergencyCount: emergencyAppointments.length,
     normalCount: normalAppointments.length,
     emergencyAppointments,
@@ -228,9 +246,119 @@ const completeAppointment = async (
 
   await appointment.markCompleted(prescription, doctorNotes);
 
+  // Fetch patient and doctor info for notification
+  const [patientUser, doctorUser] = await Promise.all([
+    UserModel.findById(appointment.patientId).select("email"),
+    UserModel.findById(userId).select("name"),
+  ]);
+
+  // Fire-and-forget email notification
+  notifyAppointmentCompleted(patientUser.email, {
+    doctorName: doctorUser.name,
+    date: appointment.date,
+    hasPrescription: !!prescription,
+  });
+
   return {
     appointmentId: appointment._id,
     status: appointment.status,
+  };
+};
+
+const getDoctorProfile = async (userId) => {
+  const [user, doctor] = await Promise.all([
+    UserModel.findById(userId).select(
+      "name email phone gender dob addresses profilePhoto",
+    ),
+    DoctorModel.findOne({ userId }),
+  ]);
+
+  if (!user) {
+    const err = new Error("User not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  return {
+    user: {
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      gender: user.gender,
+      dob: user.dob,
+      addresses: user.addresses,
+      profilePhoto: user.profilePhoto,
+    },
+    professional: {
+      specialization: doctor?.specialization,
+      qualification: doctor?.qualification,
+      experience: doctor?.experience,
+      licenseNumber: doctor?.licenseNumber,
+      consultationFee: doctor?.consultationFee,
+      availableModes: doctor?.availableModes || [],
+      isVerified: doctor?.isVerified || false,
+    },
+  };
+};
+
+const updateDoctorProfile = async (userId, updates) => {
+  const {
+    name,
+    phone,
+    gender,
+    dob,
+    addresses,
+    consultationFee,
+    availableModes,
+  } = updates;
+
+  // Update user fields
+  const userUpdates = {};
+  if (name !== undefined) userUpdates.name = name;
+  if (phone !== undefined) userUpdates.phone = phone;
+  if (gender !== undefined) userUpdates.gender = gender;
+  if (dob !== undefined) userUpdates.dob = dob;
+  if (addresses !== undefined) userUpdates.addresses = addresses;
+
+  // Update doctor-editable fields (not specialization/qualification/license — those go through admin)
+  const doctorUpdates = {};
+  if (consultationFee !== undefined)
+    doctorUpdates.consultationFee = consultationFee;
+  if (availableModes !== undefined)
+    doctorUpdates.availableModes = availableModes;
+
+  const [user, doctor] = await Promise.all([
+    Object.keys(userUpdates).length > 0
+      ? UserModel.findByIdAndUpdate(userId, userUpdates, { new: true }).select(
+          "name email phone gender dob addresses profilePhoto",
+        )
+      : UserModel.findById(userId).select(
+          "name email phone gender dob addresses profilePhoto",
+        ),
+    Object.keys(doctorUpdates).length > 0
+      ? DoctorModel.findOneAndUpdate({ userId }, doctorUpdates, { new: true })
+      : DoctorModel.findOne({ userId }),
+  ]);
+
+  return {
+    user: {
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      gender: user.gender,
+      dob: user.dob,
+      addresses: user.addresses,
+      profilePhoto: user.profilePhoto,
+    },
+    professional: {
+      specialization: doctor?.specialization,
+      qualification: doctor?.qualification,
+      experience: doctor?.experience,
+      licenseNumber: doctor?.licenseNumber,
+      consultationFee: doctor?.consultationFee,
+      availableModes: doctor?.availableModes || [],
+      isVerified: doctor?.isVerified || false,
+    },
   };
 };
 
@@ -240,4 +368,6 @@ module.exports = {
   getTodayAppointments,
   getAppointmentDetail,
   completeAppointment,
+  getDoctorProfile,
+  updateDoctorProfile,
 };

@@ -1,4 +1,11 @@
-const { signupUser, loginUser, checkEmailExists } = require("./services");
+const {
+  signupUser,
+  loginUser,
+  checkEmailExists,
+  forgotPassword,
+  resetPassword,
+} = require("./services");
+const { sendOtp } = require("../otps/services");
 
 const userSignupController = async (req, res, next) => {
   try {
@@ -87,10 +94,40 @@ const checkEmailExistsController = async (req, res, next) => {
   }
 };
 
+const forgotPasswordController = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    await forgotPassword(email);
+    const expiryMinutes = await sendOtp(email);
+    res.status(200).json({
+      isSuccess: true,
+      message: `OTP sent to ${email}. Valid for ${expiryMinutes} minutes.`,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const resetPasswordController = async (req, res, next) => {
+  try {
+    const { email, newPassword } = req.body;
+    await resetPassword(email, newPassword);
+    res.status(200).json({
+      isSuccess: true,
+      message:
+        "Password reset successfully. You can now login with your new password.",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   userSignupController,
   userLoginController,
   userLogoutController,
   getCurrentUserController,
   checkEmailExistsController,
+  forgotPasswordController,
+  resetPasswordController,
 };

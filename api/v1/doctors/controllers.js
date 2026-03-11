@@ -4,6 +4,8 @@ const {
   getTodayAppointments,
   getAppointmentDetail,
   completeAppointment,
+  getDoctorProfile,
+  updateDoctorProfile,
 } = require("./services");
 
 const doctorDashboardController = async (req, res, next) => {
@@ -21,10 +23,12 @@ const doctorDashboardController = async (req, res, next) => {
 
 const getDoctorAppointmentsController = async (req, res, next) => {
   try {
-    const { status, date } = req.query;
+    const { status, date, page, limit } = req.query;
     const data = await getDoctorAppointments(req.currentDoctor.userId, {
       status,
       date,
+      page,
+      limit,
     });
     res.status(200).json({
       isSuccess: true,
@@ -88,10 +92,38 @@ const completeAppointmentController = async (req, res, next) => {
   }
 };
 
+const getDoctorProfileController = async (req, res, next) => {
+  try {
+    const data = await getDoctorProfile(req.currentDoctor.userId);
+    res.status(200).json({
+      isSuccess: true,
+      message: "Doctor profile retrieved",
+      data,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const updateDoctorProfileController = async (req, res, next) => {
+  try {
+    const data = await updateDoctorProfile(req.currentDoctor.userId, req.body);
+    res.status(200).json({
+      isSuccess: true,
+      message: "Doctor profile updated successfully",
+      data,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   doctorDashboardController,
   getDoctorAppointmentsController,
   getTodayAppointmentsController,
   getAppointmentDetailController,
   completeAppointmentController,
+  getDoctorProfileController,
+  updateDoctorProfileController,
 };

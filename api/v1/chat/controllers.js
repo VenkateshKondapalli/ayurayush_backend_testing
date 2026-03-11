@@ -58,7 +58,10 @@ const getConversationController = async (req, res, next) => {
 
 const getPatientConversationsController = async (req, res, next) => {
   try {
-    const data = await getPatientConversations(req.currentPatient.userId);
+    const data = await getPatientConversations(
+      req.currentPatient.userId,
+      req.query,
+    );
     res.status(200).json({
       isSuccess: true,
       message: "Conversations retrieved",

@@ -12,6 +12,8 @@ const {
   getAppointmentDetailsController,
   getPatientAppointmentsController,
   getVerifiedDoctorsController,
+  getPatientProfileController,
+  updatePatientProfileController,
 } = require("./controllers");
 const {
   bookAppointmentValidator,
@@ -85,6 +87,22 @@ patientsRouter.get(
   validateLoggedInUserMiddleware,
   validatePatientRole,
   getVerifiedDoctorsController,
+);
+
+// Get patient profile
+patientsRouter.get(
+  "/profile",
+  validateLoggedInUserMiddleware,
+  validatePatientRole,
+  getPatientProfileController,
+);
+
+// Update patient profile
+patientsRouter.put(
+  "/profile",
+  validateLoggedInUserMiddleware,
+  validatePatientRole,
+  updatePatientProfileController,
 );
 
 module.exports = { patientsRouter };

@@ -3,6 +3,13 @@ const { Schema, model } = mongoose;
 
 const BLOOD_GROUP_OPTIONS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
+// Counter collection for auto-incrementing MRN
+const counterSchema = new Schema({
+  _id: { type: String, required: true },
+  seq: { type: Number, default: 0 },
+});
+const CounterModel = model("counter", counterSchema);
+
 const patientSchema = new Schema(
   {
     userId: {
@@ -10,6 +17,12 @@ const patientSchema = new Schema(
       ref: "user",
       required: true,
       unique: true,
+    },
+
+    mrn: {
+      type: String,
+      unique: true,
+      index: true,
     },
 
     bloodGroup: {
@@ -42,6 +55,19 @@ const patientSchema = new Schema(
     versionKey: false,
   },
 );
+
+patientSchema.pre("save", async function (next) {
+  if (!this.mrn) {
+    const year = new Date().getFullYear();
+    const counter = await CounterModel.findByIdAndUpdate(
+      "patient_mrn",
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true },
+    );
+    this.mrn = `AYR-${year}-${String(counter.seq).padStart(5, "0")}`;
+  }
+  next();
+});
 
 const PatientModel = model("patient", patientSchema);
 

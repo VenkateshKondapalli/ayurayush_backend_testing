@@ -13,7 +13,12 @@ const { PatientModel } = require("../../../models/patientSchema");
 const {
   calculateAge,
   calculateWaitingTime,
+  parsePagination,
 } = require("../../../utils/helpers");
+const {
+  notifyAppointmentApproved,
+  notifyAppointmentRejected,
+} = require("../../../utils/appointmentNotifications");
 
 const getDashboardStats = async () => {
   const [totalUsers, totalDoctors, totalPatients] = await Promise.all([
@@ -96,14 +101,22 @@ const rejectDoctorApplication = async (applicationId, adminUserId) => {
   await application.save();
 };
 
-const getPendingNormalAppointments = async () => {
-  const appointments = await AppointmentModel.find({
+const getPendingNormalAppointments = async (query = {}) => {
+  const { page, limit, skip } = parsePagination(query);
+  const filter = {
     status: "pending_admin_approval",
     urgencyLevel: "normal",
-  })
-    .populate("patientId", "name email phone gender dob")
-    .populate("doctorId", "name email phone")
-    .sort({ createdAt: 1 });
+  };
+
+  const [appointments, totalCount] = await Promise.all([
+    AppointmentModel.find(filter)
+      .populate("patientId", "name email phone gender dob")
+      .populate("doctorId", "name email phone")
+      .sort({ createdAt: 1 })
+      .skip(skip)
+      .limit(limit),
+    AppointmentModel.countDocuments(filter),
+  ]);
 
   // Batch fetch all doctor profiles in one query
   const doctorUserIds = appointments.map((apt) => apt.doctorId._id);
@@ -114,7 +127,7 @@ const getPendingNormalAppointments = async () => {
     doctorProfiles.map((d) => [d.userId.toString(), d]),
   );
 
-  return appointments.map((apt) => {
+  const result = appointments.map((apt) => {
     const doctor = doctorMap.get(apt.doctorId._id.toString());
 
     return {
@@ -143,16 +156,32 @@ const getPendingNormalAppointments = async () => {
       waitingTime: calculateWaitingTime(apt.createdAt),
     };
   });
+
+  return {
+    count: result.length,
+    totalCount,
+    page,
+    totalPages: Math.ceil(totalCount / limit),
+    appointments: result,
+  };
 };
 
-const getEmergencyAppointments = async () => {
-  const appointments = await AppointmentModel.find({
+const getEmergencyAppointments = async (query = {}) => {
+  const { page, limit, skip } = parsePagination(query);
+  const filter = {
     status: "pending_admin_approval",
     urgencyLevel: "emergency",
-  })
-    .populate("patientId", "name email phone gender dob")
-    .populate("doctorId", "name email phone")
-    .sort({ createdAt: 1 });
+  };
+
+  const [appointments, totalCount] = await Promise.all([
+    AppointmentModel.find(filter)
+      .populate("patientId", "name email phone gender dob")
+      .populate("doctorId", "name email phone")
+      .sort({ createdAt: 1 })
+      .skip(skip)
+      .limit(limit),
+    AppointmentModel.countDocuments(filter),
+  ]);
 
   // Batch fetch doctor profiles and chat histories in parallel
   const doctorUserIds = appointments.map((apt) => apt.doctorId._id);
@@ -174,7 +203,7 @@ const getEmergencyAppointments = async () => {
   );
   const chatMap = new Map(chatHistories.map((c) => [c.conversationId, c]));
 
-  return appointments.map((apt) => {
+  const result = appointments.map((apt) => {
     const doctor = doctorMap.get(apt.doctorId._id.toString());
     const chatHistory = chatMap.get(apt.chatConversationId);
 
@@ -206,6 +235,14 @@ const getEmergencyAppointments = async () => {
       priority: "URGENT - EMERGENCY",
     };
   });
+
+  return {
+    count: result.length,
+    totalCount,
+    page,
+    totalPages: Math.ceil(totalCount / limit),
+    appointments: result,
+  };
 };
 
 const approveAppointment = async (
@@ -272,6 +309,13 @@ const approveAppointment = async (
     .populate("patientId", "name email")
     .populate("doctorId", "name");
 
+  // Fire-and-forget email notification
+  notifyAppointmentApproved(updatedAppointment.patientId.email, {
+    doctorName: updatedAppointment.doctorId.name,
+    date: updatedAppointment.date,
+    timeSlot: updatedAppointment.timeSlot,
+  });
+
   return {
     appointmentId: updatedAppointment._id,
     status: updatedAppointment.status,
@@ -300,6 +344,19 @@ const rejectAppointment = async (appointmentId, adminUserId, reason) => {
   }
 
   await appointment.rejectByAdmin(adminUserId, reason);
+
+  // Fetch patient and doctor info for notification
+  const [patientUser, doctorUser] = await Promise.all([
+    UserModel.findById(appointment.patientId).select("email"),
+    UserModel.findById(appointment.doctorId).select("name"),
+  ]);
+
+  // Fire-and-forget email notification
+  notifyAppointmentRejected(patientUser.email, {
+    doctorName: doctorUser?.name || "N/A",
+    date: appointment.date,
+    reason,
+  });
 
   return { appointmentId: appointment._id, status: appointment.status, reason };
 };

@@ -56,4 +56,57 @@ const userLoginValidator = (req, res, next) => {
   }
 };
 
-module.exports = { userSignupValidator, userLoginValidator };
+const forgotPasswordValidator = (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({
+        isSuccess: false,
+        message: "Email is required!",
+      });
+    }
+    if (!EMAIL_REGEX.test(email)) {
+      return res.status(400).json({
+        isSuccess: false,
+        message: "Invalid email format!",
+      });
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+};
+
+const resetPasswordValidator = (req, res, next) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({
+        isSuccess: false,
+        message: "Email, OTP and new password are required!",
+      });
+    }
+    if (!EMAIL_REGEX.test(email)) {
+      return res.status(400).json({
+        isSuccess: false,
+        message: "Invalid email format!",
+      });
+    }
+    if (newPassword.length < PASSWORD_MIN_LENGTH) {
+      return res.status(400).json({
+        isSuccess: false,
+        message: `New password must be at least ${PASSWORD_MIN_LENGTH} characters!`,
+      });
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = {
+  userSignupValidator,
+  userLoginValidator,
+  forgotPasswordValidator,
+  resetPasswordValidator,
+};

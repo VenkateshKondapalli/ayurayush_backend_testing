@@ -7,6 +7,8 @@ const {
   getAppointmentDetails,
   cancelAppointment,
   getVerifiedDoctors,
+  getPatientProfile,
+  updatePatientProfile,
 } = require("./services");
 
 const patientDashboardController = async (req, res, next) => {
@@ -67,6 +69,7 @@ const getPatientAppointmentsController = async (req, res, next) => {
     const data = await getPatientAppointments(
       req.currentPatient.userId,
       req.query.status,
+      req.query,
     );
     res.status(200).json({
       isSuccess: true,
@@ -111,11 +114,40 @@ const cancelAppointmentController = async (req, res, next) => {
 
 const getVerifiedDoctorsController = async (req, res, next) => {
   try {
-    const doctors = await getVerifiedDoctors(req.query.specialization);
+    const data = await getVerifiedDoctors(req.query.specialization, req.query);
     res.status(200).json({
       isSuccess: true,
       message: "Verified doctors retrieved",
-      data: { count: doctors.length, doctors },
+      data,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getPatientProfileController = async (req, res, next) => {
+  try {
+    const data = await getPatientProfile(req.currentPatient.userId);
+    res.status(200).json({
+      isSuccess: true,
+      message: "Patient profile retrieved",
+      data,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const updatePatientProfileController = async (req, res, next) => {
+  try {
+    const data = await updatePatientProfile(
+      req.currentPatient.userId,
+      req.body,
+    );
+    res.status(200).json({
+      isSuccess: true,
+      message: "Patient profile updated successfully",
+      data,
     });
   } catch (err) {
     next(err);
@@ -131,4 +163,6 @@ module.exports = {
   getAppointmentDetailsController,
   cancelAppointmentController,
   getVerifiedDoctorsController,
+  getPatientProfileController,
+  updatePatientProfileController,
 };

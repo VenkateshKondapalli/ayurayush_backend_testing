@@ -125,4 +125,4 @@ const sendOtpEmail = async (toEmail, otp) => {
   );
 };
 
-module.exports = { sendOtpEmail };
+module.exports = { sendEmail, sendOtpEmail };

@@ -9,6 +9,8 @@ const {
   getTodayAppointmentsController,
   getAppointmentDetailController,
   completeAppointmentController,
+  getDoctorProfileController,
+  updateDoctorProfileController,
 } = require("./controllers");
 
 const doctorsRouter = express.Router();
@@ -52,6 +54,23 @@ doctorsRouter.post(
   validateDoctorRole,
   completeAppointmentController,
 );
+
+// Get doctor profile
+doctorsRouter.get(
+  "/profile",
+  validateLoggedInUserMiddleware,
+  validateDoctorRole,
+  getDoctorProfileController,
+);
+
+// Update doctor profile
+doctorsRouter.put(
+  "/profile",
+  validateLoggedInUserMiddleware,
+  validateDoctorRole,
+  updateDoctorProfileController,
+);
+
 module.exports = {
   doctorsRouter,
 };

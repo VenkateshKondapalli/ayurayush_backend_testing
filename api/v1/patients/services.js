@@ -9,7 +9,11 @@ const {
 const { DoctorModel } = require("../../../models/doctorSchema");
 const { PatientModel } = require("../../../models/patientSchema");
 const { UserModel } = require("../../../models/userSchema");
-const { formatAISummary } = require("../../../utils/helpers");
+const { formatAISummary, parsePagination } = require("../../../utils/helpers");
+const {
+  notifyAppointmentBooked,
+  notifyAppointmentCancelled,
+} = require("../../../utils/appointmentNotifications");
 
 const getPatientDashboard = async (userId) => {
   let patient = await PatientModel.findOne({ userId });
@@ -27,6 +31,7 @@ const getPatientDashboard = async (userId) => {
   return {
     patientId: patient._id,
     userId: patient.userId,
+    mrn: patient.mrn,
     bloodGroup: patient.bloodGroup,
     medicalHistory: patient.medicalHistory,
     allergies: patient.allergies,
@@ -166,6 +171,15 @@ const bookAppointment = async (
 
   const doctorUser =
     await UserModel.findById(doctorId).select("name email phone");
+  const patientUser = await UserModel.findById(userId).select("email");
+
+  // Fire-and-forget email notification
+  notifyAppointmentBooked(patientUser.email, {
+    doctorName: doctorUser.name,
+    date: appointment.date,
+    timeSlot: appointment.timeSlot,
+    urgencyLevel,
+  });
 
   return {
     appointmentId: appointment._id,
@@ -184,15 +198,21 @@ const bookAppointment = async (
   };
 };
 
-const getPatientAppointments = async (userId, status) => {
-  const query = { patientId: userId };
+const getPatientAppointments = async (userId, status, query = {}) => {
+  const { page, limit, skip } = parsePagination(query);
+  const filter = { patientId: userId };
   if (status) {
-    query.status = status;
+    filter.status = status;
   }
 
-  const appointments = await AppointmentModel.find(query)
-    .populate("doctorId", "name email phone profilePhoto")
-    .sort({ date: -1, createdAt: -1 });
+  const [appointments, totalCount] = await Promise.all([
+    AppointmentModel.find(filter)
+      .populate("doctorId", "name email phone profilePhoto")
+      .sort({ date: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    AppointmentModel.countDocuments(filter),
+  ]);
 
   // Batch fetch all doctor profiles in one query instead of N+1
   const doctorUserIds = appointments.map((apt) => apt.doctorId._id);
@@ -230,6 +250,9 @@ const getPatientAppointments = async (userId, status) => {
 
   return {
     count: appointmentsWithDetails.length,
+    totalCount,
+    page,
+    totalPages: Math.ceil(totalCount / limit),
     appointments: appointmentsWithDetails,
   };
 };
@@ -304,17 +327,34 @@ const cancelAppointment = async (userId, appointmentId) => {
     throw error;
   }
 
+  // Fetch details for notification before cancelling
+  const [patientUser, doctorUser] = await Promise.all([
+    UserModel.findById(userId).select("email"),
+    UserModel.findById(appointment.doctorId).select("name"),
+  ]);
+
   await appointment.cancel("Cancelled by patient");
+
+  // Fire-and-forget email notification
+  notifyAppointmentCancelled(patientUser.email, {
+    doctorName: doctorUser?.name || "N/A",
+    date: appointment.date,
+    timeSlot: appointment.timeSlot,
+  });
 };
 
-const getVerifiedDoctors = async (specialization) => {
+const getVerifiedDoctors = async (specialization, query = {}) => {
+  const { page, limit, skip } = parsePagination(query);
   const doctorQuery = { isVerified: true };
   if (specialization) {
     const escaped = specialization.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     doctorQuery.specialization = { $regex: new RegExp(`^${escaped}$`, "i") };
   }
 
-  const doctors = await DoctorModel.find(doctorQuery);
+  const [doctors, totalCount] = await Promise.all([
+    DoctorModel.find(doctorQuery).skip(skip).limit(limit),
+    DoctorModel.countDocuments(doctorQuery),
+  ]);
   const doctorUserIds = doctors.map((d) => d.userId);
 
   const users = await UserModel.find({
@@ -322,7 +362,7 @@ const getVerifiedDoctors = async (specialization) => {
     isActive: true,
   }).select("name email phone gender profilePhoto");
 
-  return doctors
+  const doctorList = doctors
     .map((doc) => {
       const user = users.find(
         (u) => u._id.toString() === doc.userId.toString(),
@@ -342,6 +382,111 @@ const getVerifiedDoctors = async (specialization) => {
       };
     })
     .filter(Boolean);
+
+  return {
+    count: doctorList.length,
+    totalCount,
+    page,
+    totalPages: Math.ceil(totalCount / limit),
+    doctors: doctorList,
+  };
+};
+
+const getPatientProfile = async (userId) => {
+  const [user, patient] = await Promise.all([
+    UserModel.findById(userId).select(
+      "name email phone gender dob addresses profilePhoto",
+    ),
+    PatientModel.findOne({ userId }),
+  ]);
+
+  if (!user) {
+    const err = new Error("User not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  return {
+    user: {
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      gender: user.gender,
+      dob: user.dob,
+      addresses: user.addresses,
+      profilePhoto: user.profilePhoto,
+    },
+    medical: {
+      mrn: patient?.mrn || null,
+      bloodGroup: patient?.bloodGroup || null,
+      medicalHistory: patient?.medicalHistory || [],
+      allergies: patient?.allergies || [],
+      emergencyContact: patient?.emergencyContact || {},
+    },
+  };
+};
+
+const updatePatientProfile = async (userId, updates) => {
+  const {
+    name,
+    phone,
+    gender,
+    dob,
+    addresses,
+    bloodGroup,
+    medicalHistory,
+    allergies,
+    emergencyContact,
+  } = updates;
+
+  // Update user fields
+  const userUpdates = {};
+  if (name !== undefined) userUpdates.name = name;
+  if (phone !== undefined) userUpdates.phone = phone;
+  if (gender !== undefined) userUpdates.gender = gender;
+  if (dob !== undefined) userUpdates.dob = dob;
+  if (addresses !== undefined) userUpdates.addresses = addresses;
+
+  // Update patient medical fields
+  const patientUpdates = {};
+  if (bloodGroup !== undefined) patientUpdates.bloodGroup = bloodGroup;
+  if (medicalHistory !== undefined)
+    patientUpdates.medicalHistory = medicalHistory;
+  if (allergies !== undefined) patientUpdates.allergies = allergies;
+  if (emergencyContact !== undefined)
+    patientUpdates.emergencyContact = emergencyContact;
+
+  const [user, patient] = await Promise.all([
+    Object.keys(userUpdates).length > 0
+      ? UserModel.findByIdAndUpdate(userId, userUpdates, { new: true }).select(
+          "name email phone gender dob addresses profilePhoto",
+        )
+      : UserModel.findById(userId).select(
+          "name email phone gender dob addresses profilePhoto",
+        ),
+    Object.keys(patientUpdates).length > 0
+      ? PatientModel.findOneAndUpdate({ userId }, patientUpdates, { new: true })
+      : PatientModel.findOne({ userId }),
+  ]);
+
+  return {
+    user: {
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      gender: user.gender,
+      dob: user.dob,
+      addresses: user.addresses,
+      profilePhoto: user.profilePhoto,
+    },
+    medical: {
+      mrn: patient?.mrn || null,
+      bloodGroup: patient?.bloodGroup || null,
+      medicalHistory: patient?.medicalHistory || [],
+      allergies: patient?.allergies || [],
+      emergencyContact: patient?.emergencyContact || {},
+    },
+  };
 };
 
 module.exports = {
@@ -353,4 +498,6 @@ module.exports = {
   getAppointmentDetails,
   cancelAppointment,
   getVerifiedDoctors,
+  getPatientProfile,
+  updatePatientProfile,
 };

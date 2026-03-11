@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require("uuid");
 const { ChatHistoryModel } = require("../../../models/chatHistorySchema");
+const { parsePagination } = require("../../../utils/helpers");
 const {
   checkForEmergency,
   getAIChatResponse,
@@ -135,16 +136,28 @@ const getConversation = async (userId, conversationId) => {
   };
 };
 
-const getPatientConversations = async (userId) => {
-  const conversations = await ChatHistoryModel.find({
-    patientId: userId,
-  })
-    .select(
-      "conversationId status summary.symptoms summary.urgencyLevel createdAt appointmentId",
-    )
-    .sort({ createdAt: -1 });
+const getPatientConversations = async (userId, query = {}) => {
+  const { page, limit, skip } = parsePagination(query);
+  const filter = { patientId: userId };
 
-  return { count: conversations.length, conversations };
+  const [conversations, totalCount] = await Promise.all([
+    ChatHistoryModel.find(filter)
+      .select(
+        "conversationId status summary.symptoms summary.urgencyLevel createdAt appointmentId",
+      )
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    ChatHistoryModel.countDocuments(filter),
+  ]);
+
+  return {
+    count: conversations.length,
+    totalCount,
+    page,
+    totalPages: Math.ceil(totalCount / limit),
+    conversations,
+  };
 };
 
 module.exports = {

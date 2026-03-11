@@ -65,14 +65,13 @@ const rejectDoctorApplicationController = async (req, res, next) => {
 
 const getPendingNormalAppointmentsController = async (req, res, next) => {
   try {
-    const appointments = await getPendingNormalAppointments();
+    const data = await getPendingNormalAppointments(req.query);
     res.status(200).json({
       isSuccess: true,
       message: "Pending appointments retrieved",
       data: {
         queueType: "normal",
-        count: appointments.length,
-        appointments,
+        ...data,
       },
     });
   } catch (err) {
@@ -82,17 +81,16 @@ const getPendingNormalAppointmentsController = async (req, res, next) => {
 
 const getEmergencyAppointmentsController = async (req, res, next) => {
   try {
-    const appointments = await getEmergencyAppointments();
+    const data = await getEmergencyAppointments(req.query);
     res.status(200).json({
       isSuccess: true,
       message: "Emergency appointments retrieved",
       data: {
         queueType: "emergency",
-        count: appointments.length,
-        appointments,
+        ...data,
         alert:
-          appointments.length > 0
-            ? "⚠️ Emergency appointments require immediate review!"
+          data.count > 0
+            ? "Emergency appointments require immediate review!"
             : null,
       },
     });
