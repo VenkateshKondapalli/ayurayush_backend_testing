@@ -4,50 +4,50 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_AI_API_KEY);
 
 // Emergency keywords configuration
 const EMERGENCY_KEYWORDS = [
-  "chest pain",
-  "heart attack",
-  "cardiac arrest",
-  "can't breathe",
-  "difficulty breathing",
-  "breathing problem",
-  "shortness of breath",
-  "severe bleeding",
-  "heavy bleeding",
-  "blood loss",
-  "unconscious",
-  "fainted",
-  "passed out",
-  "blacked out",
-  "seizure",
-  "convulsion",
-  "fits",
-  "stroke",
-  "paralysis",
-  "can't move",
-  "severe head injury",
-  "head trauma",
-  "suicide",
-  "kill myself",
-  "end my life",
-  "want to die",
-  "allergic reaction",
-  "anaphylaxis",
-  "throat closing",
-  "choking",
-  "can't swallow",
-  "severe burn",
-  "burned badly",
-  "poisoning",
-  "poisoned",
-  "overdose",
-  "broken bone",
-  "severe pain",
-  "vomiting blood",
-  "coughing blood",
+    "chest pain",
+    "heart attack",
+    "cardiac arrest",
+    "can't breathe",
+    "difficulty breathing",
+    "breathing problem",
+    "shortness of breath",
+    "severe bleeding",
+    "heavy bleeding",
+    "blood loss",
+    "unconscious",
+    "fainted",
+    "passed out",
+    "blacked out",
+    "seizure",
+    "convulsion",
+    "fits",
+    "stroke",
+    "paralysis",
+    "can't move",
+    "severe head injury",
+    "head trauma",
+    "suicide",
+    "kill myself",
+    "end my life",
+    "want to die",
+    "allergic reaction",
+    "anaphylaxis",
+    "throat closing",
+    "choking",
+    "can't swallow",
+    "severe burn",
+    "burned badly",
+    "poisoning",
+    "poisoned",
+    "overdose",
+    "broken bone",
+    "severe pain",
+    "vomiting blood",
+    "coughing blood",
 ];
 
 const SYSTEM_PROMPTS = {
-  normal: `You are a compassionate and professional medical assistant helping patients describe their symptoms before booking a doctor appointment.
+    normal: `You are a compassionate and professional medical assistant helping patients describe their symptoms before booking a doctor appointment.
 
 Your responsibilities:
 - Ask relevant follow-up questions to understand symptoms better
@@ -65,7 +65,7 @@ Important guidelines:
 - Never dismiss patient concerns
 - If patient mentions multiple symptoms, prioritize the most concerning one first`,
 
-  emergency: `EMERGENCY PROTOCOL ACTIVATED
+    emergency: `EMERGENCY PROTOCOL ACTIVATED
 
 The patient has described symptoms that may indicate a medical emergency.
 
@@ -78,7 +78,7 @@ Your immediate response should:
 
 Be brief and direct. Patient safety is the priority.`,
 
-  summary: `You are a medical data extraction system. Analyze the conversation between a patient and medical assistant.
+    summary: `You are a medical data extraction system. Analyze the conversation between a patient and medical assistant.
 
 Extract and return ONLY a valid JSON object with this exact structure (no additional text):
 
@@ -88,7 +88,9 @@ Extract and return ONLY a valid JSON object with this exact structure (no additi
   "severity": 5,
   "urgencyLevel": "normal",
   "recommendedSpecialist": "General Physician",
-  "detailedSummary": "A brief 2-3 sentence summary of the patient's condition"
+  "detailedSummary": "A brief 2-3 sentence summary of the patient's condition",
+  "carePreference": null,
+  "prakritiType": null
 }
 
 Rules:
@@ -98,84 +100,105 @@ Rules:
 - urgencyLevel: must be exactly "normal", "urgent", or "emergency"
 - recommendedSpecialist: one of these: "General Physician", "Cardiologist", "Neurologist", "Orthopedic", "Dermatologist", "ENT Specialist", "Pediatrician", "Gynecologist", "Psychiatrist", "Dentist", "Ophthalmologist", "Gastroenterologist"
 - detailedSummary: clear, concise summary in simple language
+- carePreference: if patient explicitly mentioned a preference use exactly "ayurveda", "panchakarma", "normal", or "none". Otherwise null.
+- prakritiType: if Vata/Pitta/Kapha body type was mentioned or implied, use exactly "vata", "pitta", "kapha", "vata-pitta", "pitta-kapha", or "vata-kapha". Otherwise null.
 
 Return ONLY the JSON object, nothing else.`,
 };
 
-// Check if user message contains emergency keywords
+// Check if user message contains emergency keywords using word boundaries
+// to avoid false positives like "breakfast" matching "break".
 const checkForEmergency = (message) => {
-  const lowerMessage = message.toLowerCase();
-  return EMERGENCY_KEYWORDS.some((keyword) => lowerMessage.includes(keyword));
+    return EMERGENCY_KEYWORDS.some((keyword) => {
+        const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return new RegExp(`\\b${escaped}\\b`, "i").test(message);
+    });
 };
 
 // Get AI chat response from Gemini
 const getAIChatResponse = async (messages, isEmergency = false) => {
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-  const systemPrompt = isEmergency
-    ? SYSTEM_PROMPTS.emergency
-    : SYSTEM_PROMPTS.normal;
+    const systemPrompt = isEmergency
+        ? SYSTEM_PROMPTS.emergency
+        : SYSTEM_PROMPTS.normal;
 
-  // Build chat history for Gemini format
-  const history = messages.slice(0, -1).map((msg) => ({
-    role: msg.role === "assistant" ? "model" : "user",
-    parts: [{ text: msg.content }],
-  }));
+    // Build chat history for Gemini format
+    const history = messages.slice(0, -1).map((msg) => ({
+        role: msg.role === "assistant" ? "model" : "user",
+        parts: [{ text: msg.content }],
+    }));
 
-  const chat = model.startChat({
-    history,
-    systemInstruction: { parts: [{ text: systemPrompt }] },
-  });
+    const chat = model.startChat({
+        history,
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+    });
 
-  const lastMessage = messages[messages.length - 1];
-  const result = await chat.sendMessage(lastMessage.content);
-  const response = result.response.text();
+    const lastMessage = messages[messages.length - 1];
+    const result = await chat.sendMessage(lastMessage.content);
+    const response = result.response.text();
 
-  return response;
+    return response;
 };
 
 // Generate conversation summary using Gemini
 const generateConversationSummary = async (messages) => {
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-  const conversationText = messages
-    .map(
-      (msg) =>
-        `${msg.role === "user" ? "Patient" : "Assistant"}: ${msg.content}`,
-    )
-    .join("\n");
+    const conversationText = messages
+        .map(
+            (msg) =>
+                `${msg.role === "user" ? "Patient" : "Assistant"}: ${msg.content}`,
+        )
+        .join("\n");
 
-  const result = await model.generateContent({
-    contents: [
-      {
-        role: "user",
-        parts: [
-          {
-            text: `${SYSTEM_PROMPTS.summary}\n\nConversation:\n${conversationText}`,
-          },
+    const result = await model.generateContent({
+        contents: [
+            {
+                role: "user",
+                parts: [
+                    {
+                        text: `${SYSTEM_PROMPTS.summary}\n\nConversation:\n${conversationText}`,
+                    },
+                ],
+            },
         ],
-      },
-    ],
-  });
+    });
 
-  const responseText = result.response.text().trim();
+    const responseText = result.response.text().trim();
 
-  // Extract JSON from the response (handle markdown code blocks)
-  let jsonString = responseText;
-  const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (jsonMatch) {
-    jsonString = jsonMatch[1].trim();
-  }
+    // Extract JSON from the response (handle markdown code blocks)
+    let jsonString = responseText;
+    const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+        jsonString = jsonMatch[1].trim();
+    }
 
-  const summary = JSON.parse(jsonString);
+    // Safe JSON parse — Gemini occasionally returns prose instead of structured JSON
+    let summary;
+    try {
+        summary = JSON.parse(jsonString);
+    } catch {
+        summary = {
+            symptoms: [],
+            duration: "Not specified",
+            severity: 5,
+            urgencyLevel: "normal",
+            recommendedSpecialist: "General Physician",
+            detailedSummary:
+                "Summary could not be generated. Please review the conversation manually.",
+            carePreference: null,
+            prakritiType: null,
+        };
+    }
 
-  return summary;
+    return summary;
 };
 
 module.exports = {
-  EMERGENCY_KEYWORDS,
-  SYSTEM_PROMPTS,
-  checkForEmergency,
-  getAIChatResponse,
-  generateConversationSummary,
+    EMERGENCY_KEYWORDS,
+    SYSTEM_PROMPTS,
+    checkForEmergency,
+    getAIChatResponse,
+    generateConversationSummary,
 };

@@ -8,7 +8,6 @@ const {
   reviewDoctorApplicationsController,
   approveDoctorApplicationController,
   rejectDoctorApplicationController,
-  getpendingDoctorApplicationsController,
   getPendingNormalAppointmentsController,
   getEmergencyAppointmentsController,
   approveAppointmentController,
