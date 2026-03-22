@@ -10,6 +10,19 @@ const {
   getPatientProfile,
   updatePatientProfile,
 } = require("./services");
+const {
+  getPatientDashboard,
+  applyForDoctorRole,
+  getAvailableSlots,
+  bookAppointment,
+  getPatientAppointments,
+  getAppointmentDetails,
+  cancelAppointment,
+  getVerifiedDoctors,
+  getPatientProfile,
+  updatePatientProfile,
+  getTreatmentSuggestionsForPatient,
+} = require("./services");
 
 const patientDashboardController = async (req, res, next) => {
   try {
@@ -155,6 +168,30 @@ const updatePatientProfileController = async (req, res, next) => {
 };
 
 module.exports = {
+  const getTreatmentSuggestionsController = async (req, res, next) => {
+    try {
+      const { conversationId } = req.query;
+      if (!conversationId) {
+        return res.status(400).json({
+          isSuccess: false,
+          message: "conversationId query parameter is required",
+        });
+      }
+      const data = await getTreatmentSuggestionsForPatient(
+        conversationId,
+        req.currentPatient.userId,
+      );
+      res.status(200).json({
+        isSuccess: true,
+        message: "Treatment suggestions retrieved",
+        data,
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  module.exports = {
   patientDashboardController,
   applyForDoctorRoleController,
   getAvailableSlotsController,
@@ -165,4 +202,16 @@ module.exports = {
   getVerifiedDoctorsController,
   getPatientProfileController,
   updatePatientProfileController,
+  patientDashboardController,
+  applyForDoctorRoleController,
+  getAvailableSlotsController,
+  bookAppointmentController,
+  getPatientAppointmentsController,
+  getAppointmentDetailsController,
+  cancelAppointmentController,
+  getVerifiedDoctorsController,
+  getPatientProfileController,
+  updatePatientProfileController,
+  getTreatmentSuggestionsController,
+};
 };

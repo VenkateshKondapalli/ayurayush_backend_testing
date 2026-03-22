@@ -2,87 +2,117 @@ const mongoose = require("mongoose");
 const { Schema, model } = mongoose;
 
 const chatHistorySchema = new Schema(
-  {
-    conversationId: {
-      type: String,
-      required: true,
-      unique: true,
-    },
-    patientId: {
-      type: Schema.Types.ObjectId,
-      ref: "user",
-      required: true,
-      index: true,
-    },
-    messages: [
-      {
-        role: {
-          type: String,
-          enum: ["user", "assistant"],
-          required: true,
+    {
+        conversationId: {
+            type: String,
+            required: true,
+            unique: true,
         },
-        content: {
-          type: String,
-          required: true,
+        patientId: {
+            type: Schema.Types.ObjectId,
+            ref: "user",
+            required: true,
+            index: true,
         },
-        timestamp: {
-          type: Date,
-          default: Date.now,
+        messages: [
+            {
+                role: {
+                    type: String,
+                    enum: ["user", "assistant"],
+                    required: true,
+                },
+                content: {
+                    type: String,
+                    required: true,
+                },
+                timestamp: {
+                    type: Date,
+                    default: Date.now,
+                },
+                isEmergency: {
+                    type: Boolean,
+                    default: false,
+                },
+            },
+        ],
+        summary: {
+            symptoms: [
+                {
+                    type: String,
+                },
+            ],
+            duration: {
+                type: String,
+                default: "",
+            },
+            severity: {
+                type: Number,
+                min: 1,
+                max: 10,
+                default: null,
+            },
+            urgencyLevel: {
+                type: String,
+                enum: ["normal", "urgent", "emergency"],
+                default: "normal",
+            },
+            recommendedSpecialist: {
+                type: String,
+                default: "",
+            },
+            detailedSummary: {
+                type: String,
+                default: "",
+            },
+            generatedAt: {
+                type: Date,
+            },
+            // --- Phase 1: Revised architecture fields ---
+            suggestedCarePath: {
+                type: String,
+                enum: ["normal", "ayurveda", "panchakarma", "hybrid"],
+                default: "normal",
+            },
+            recommendedTreatmentCodes: [{ type: String }],
+            prakritiType: {
+                type: String,
+                enum: [
+                    "vata",
+                    "pitta",
+                    "kapha",
+                    "vata-pitta",
+                    "pitta-kapha",
+                    "vata-kapha",
+                    null,
+                ],
+                default: null,
+            },
+            preConsultNote: {
+                subjective: { type: String, default: "" },
+                assessment: { type: String, default: "" },
+                plan: { type: String, default: "" },
+            },
+            carePreference: {
+                type: String,
+                enum: ["ayurveda", "panchakarma", "normal", "none", null],
+                default: null,
+            },
         },
-        isEmergency: {
-          type: Boolean,
-          default: false,
+        status: {
+            type: String,
+            enum: ["active", "completed", "emergency"],
+            default: "active",
         },
-      },
-    ],
-    summary: {
-      symptoms: [
-        {
-          type: String,
+        appointmentId: {
+            type: Schema.Types.ObjectId,
+            ref: "appointment",
+            default: null,
         },
-      ],
-      duration: {
-        type: String,
-        default: "",
-      },
-      severity: {
-        type: Number,
-        min: 1,
-        max: 10,
-        default: null,
-      },
-      urgencyLevel: {
-        type: String,
-        enum: ["normal", "urgent", "emergency"],
-        default: "normal",
-      },
-      recommendedSpecialist: {
-        type: String,
-        default: "",
-      },
-      detailedSummary: {
-        type: String,
-        default: "",
-      },
-      generatedAt: {
-        type: Date,
-      },
     },
-    status: {
-      type: String,
-      enum: ["active", "completed", "emergency"],
-      default: "active",
+    {
+        timestamps: true,
+        versionKey: false,
     },
-    appointmentId: {
-      type: Schema.Types.ObjectId,
-      ref: "appointment",
-      default: null,
-    },
-  },
-  {
-    timestamps: true,
-    versionKey: false,
-  },
 );
 
 chatHistorySchema.index({ patientId: 1, createdAt: -1 });
@@ -90,33 +120,33 @@ chatHistorySchema.index({ status: 1 });
 
 //method to add message to conversation.
 chatHistorySchema.methods.addMessage = function (
-  role,
-  content,
-  isEmergency = false,
-) {
-  this.messages.push({
     role,
     content,
-    timestamp: new Date(),
-    isEmergency,
-  });
-  return this.save();
+    isEmergency = false,
+) {
+    this.messages.push({
+        role,
+        content,
+        timestamp: new Date(),
+        isEmergency,
+    });
+    return this.save();
 };
 
 //method to mark as emergency
 chatHistorySchema.methods.markAsEmergency = function () {
-  this.status = "emergency";
-  return this.status;
+    this.status = "emergency";
+    return this.status;
 };
 
 //method to complete conversation with summary
 chatHistorySchema.methods.completeSummary = function (summaryData) {
-  this.summary = {
-    ...summaryData,
-    generatedAt: new Date(),
-  };
-  this.status = "completed";
-  return this.save();
+    this.summary = {
+        ...summaryData,
+        generatedAt: new Date(),
+    };
+    this.status = "completed";
+    return this.save();
 };
 
 const ChatHistoryModel = model("chatHistory", chatHistorySchema);

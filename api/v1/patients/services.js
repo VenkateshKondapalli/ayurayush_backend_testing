@@ -1,503 +1,674 @@
 const { AppointmentModel } = require("../../../models/appointmentSchema");
 const { ChatHistoryModel } = require("../../../models/chatHistorySchema");
 const {
-  DoctorApplicationsModel,
+    DoctorApplicationsModel,
 } = require("../../../models/doctorApplicationSchema");
 const {
-  DoctorAvailabiltyModel,
+    DoctorAvailabiltyModel,
 } = require("../../../models/doctorAvailabilitySchema");
 const { DoctorModel } = require("../../../models/doctorSchema");
 const { PatientModel } = require("../../../models/patientSchema");
 const { UserModel } = require("../../../models/userSchema");
-const { formatAISummary, parsePagination } = require("../../../utils/helpers");
+const mongoose = require("mongoose");
+const { QueueTokenModel } = require("../../../models/queueTokenSchema");
 const {
-  notifyAppointmentBooked,
-  notifyAppointmentCancelled,
+    TherapyResourceModel,
+} = require("../../../models/therapyResourceSchema");
+const {
+    formatAISummary,
+    parsePagination,
+    generateTokenNumber,
+} = require("../../../utils/helpers");
+const {
+    notifyAppointmentBooked,
+    notifyAppointmentCancelled,
 } = require("../../../utils/appointmentNotifications");
 
 const getPatientDashboard = async (userId) => {
-  let patient = await PatientModel.findOne({ userId });
+    let patient = await PatientModel.findOne({ userId });
 
-  if (!patient) {
-    patient = await PatientModel.create({
-      userId,
-      bloodGroup: null,
-      medicalHistory: [],
-      allergies: [],
-      emergencyContact: {},
-    });
-  }
+    if (!patient) {
+        patient = await PatientModel.create({
+            userId,
+            bloodGroup: null,
+            medicalHistory: [],
+            allergies: [],
+            emergencyContact: {},
+        });
+    }
 
-  return {
-    patientId: patient._id,
-    userId: patient.userId,
-    mrn: patient.mrn,
-    bloodGroup: patient.bloodGroup,
-    medicalHistory: patient.medicalHistory,
-    allergies: patient.allergies,
-    emergencyContact: patient.emergencyContact,
-    createdAt: patient.createdAt,
-  };
+    return {
+        patientId: patient._id,
+        userId: patient.userId,
+        mrn: patient.mrn,
+        bloodGroup: patient.bloodGroup,
+        medicalHistory: patient.medicalHistory,
+        allergies: patient.allergies,
+        emergencyContact: patient.emergencyContact,
+        createdAt: patient.createdAt,
+    };
 };
 
 const applyForDoctorRole = async (
-  userId,
-  { qualification, specialization, experience, licenseNumber },
+    userId,
+    { qualification, specialization, experience, licenseNumber },
 ) => {
-  const existingApplication = await DoctorApplicationsModel.findOne({
-    userId,
-  });
+    const existingApplication = await DoctorApplicationsModel.findOne({
+        userId,
+    });
 
-  if (existingApplication) {
-    const error = new Error(
-      "You have already applied for doctor role. Please wait for admin review.",
-    );
-    error.statusCode = 400;
-    throw error;
-  }
+    if (existingApplication) {
+        const error = new Error(
+            "You have already applied for doctor role. Please wait for admin review.",
+        );
+        error.statusCode = 400;
+        throw error;
+    }
 
-  const application = await DoctorApplicationsModel.create({
-    userId,
-    qualification,
-    specialization,
-    experience,
-    licenseNumber,
-  });
+    const application = await DoctorApplicationsModel.create({
+        userId,
+        qualification,
+        specialization,
+        experience,
+        licenseNumber,
+    });
 
-  return {
-    applicationId: application._id,
-    status: application.status,
-  };
+    return {
+        applicationId: application._id,
+        status: application.status,
+    };
 };
 
 const getAvailableSlots = async (doctorId, date) => {
-  const doctor = await DoctorModel.findOne({
-    userId: doctorId,
-    isVerified: true,
-  });
+    const doctor = await DoctorModel.findOne({
+        userId: doctorId,
+        isVerified: true,
+    });
 
-  if (!doctor) {
-    const error = new Error("Doctor not found or not verified");
-    error.statusCode = 404;
-    throw error;
-  }
+    if (!doctor) {
+        const error = new Error("Doctor not found or not verified");
+        error.statusCode = 404;
+        throw error;
+    }
 
-  const availableSlots = await DoctorAvailabiltyModel.getBookableSlots(
-    doctorId,
-    date,
-    AppointmentModel,
-  );
+    const availableSlots = await DoctorAvailabiltyModel.getBookableSlots(
+        doctorId,
+        date,
+        AppointmentModel,
+    );
 
-  return {
-    doctorId,
-    date,
-    availableSlots,
-    totalSlots: availableSlots.length,
-  };
+    return {
+        doctorId,
+        date,
+        availableSlots,
+        totalSlots: availableSlots.length,
+    };
 };
 
 const bookAppointment = async (
-  userId,
-  { conversationId, doctorId, date, timeSlot },
+    userId,
+    {
+        conversationId,
+        doctorId,
+        date,
+        timeSlot,
+        queueType = "normal",
+        treatmentCode = null,
+        therapistId = null,
+        roomId = null,
+        languagePreference = "english",
+    },
 ) => {
-  const chatHistory = await ChatHistoryModel.findOne({
-    conversationId,
-    patientId: userId,
-  });
+    const chatHistory = await ChatHistoryModel.findOne({
+        conversationId,
+        patientId: userId,
+    });
 
-  if (!chatHistory) {
-    const error = new Error(
-      "Conversation not found. Please complete chatbot first.",
+    if (!chatHistory) {
+        const error = new Error(
+            "Conversation not found. Please complete chatbot first.",
+        );
+        error.statusCode = 404;
+        throw error;
+    }
+
+    if (!chatHistory.summary || !chatHistory.summary.symptoms) {
+        const error = new Error(
+            "Conversation not completed. Please complete chat to get summary first.",
+        );
+        error.statusCode = 400;
+        throw error;
+    }
+
+    const doctor = await DoctorModel.findOne({
+        userId: doctorId,
+        isVerified: true,
+    });
+
+    if (!doctor) {
+        const error = new Error("Doctor not found or not verified");
+        error.statusCode = 404;
+        throw error;
+    }
+
+    const isAvailable = await AppointmentModel.isSlotAvailable(
+        doctorId,
+        date,
+        timeSlot,
     );
-    error.statusCode = 404;
-    throw error;
-  }
 
-  if (!chatHistory.summary || !chatHistory.summary.symptoms) {
-    const error = new Error(
-      "Conversation not completed. Please complete chat to get summary first.",
-    );
-    error.statusCode = 400;
-    throw error;
-  }
+    if (!isAvailable) {
+        const error = new Error(
+            "This time slot is already booked. Please choose another slot.",
+        );
+        error.statusCode = 409;
+        throw error;
+    }
 
-  const doctor = await DoctorModel.findOne({
-    userId: doctorId,
-    isVerified: true,
-  });
+    const urgencyLevel =
+        chatHistory.summary.urgencyLevel === "emergency"
+            ? "emergency"
+            : "normal";
 
-  if (!doctor) {
-    const error = new Error("Doctor not found or not verified");
-    error.statusCode = 404;
-    throw error;
-  }
+    // Format queueDate as "YYYY-MM-DD" string (matches QueueTokenModel key)
+    const appointmentDate = new Date(date);
+    const queueDate = appointmentDate.toISOString().slice(0, 10);
 
-  const isAvailable = await AppointmentModel.isSlotAvailable(
-    doctorId,
-    date,
-    timeSlot,
-  );
+    // Use a MongoDB transaction to atomically:
+    // 1. Increment the queue token counter
+    // 2. Create the appointment
+    // 3. (For Panchakarma) Reserve therapist + room slots
+    const session = await mongoose.startSession();
+    let appointment;
 
-  if (!isAvailable) {
-    const error = new Error(
-      "This time slot is already booked. Please choose another slot.",
-    );
-    error.statusCode = 409;
-    throw error;
-  }
+    try {
+        await session.withTransaction(async () => {
+            // Atomic token sequence increment (upsert counter doc)
+            const tokenDoc = await QueueTokenModel.findOneAndUpdate(
+                { queueDate, doctorId, queueType },
+                { $inc: { lastSequence: 1 } },
+                { upsert: true, new: true, session },
+            );
+            const tokenSequence = tokenDoc.lastSequence;
+            const tokenNumber = generateTokenNumber(
+                queueDate,
+                doctorId,
+                tokenSequence,
+            );
 
-  const urgencyLevel =
-    chatHistory.summary.urgencyLevel === "emergency" ? "emergency" : "normal";
+            appointment = await AppointmentModel.create(
+                [
+                    {
+                        patientId: userId,
+                        doctorId,
+                        date: appointmentDate,
+                        timeSlot,
+                        status: "pending_admin_approval",
+                        urgencyLevel,
+                        chatConversationId: conversationId,
+                        symptoms: chatHistory.summary.symptoms,
+                        aiSummary: formatAISummary(chatHistory.summary),
+                        queueType,
+                        tokenNumber,
+                        queueDate,
+                        tokenSequence,
+                        treatmentCode: treatmentCode || null,
+                        therapistId: therapistId || null,
+                        roomId: roomId || null,
+                        languagePreference,
+                        originalBooking: {
+                            doctorId,
+                            date: appointmentDate,
+                            timeSlot,
+                        },
+                    },
+                ],
+                { session },
+            );
+            appointment = appointment[0]; // create() with session returns array
 
-  const appointment = await AppointmentModel.create({
-    patientId: userId,
-    doctorId,
-    date: new Date(date),
-    timeSlot,
-    status: "pending_admin_approval",
-    urgencyLevel,
-    chatConversationId: conversationId,
-    symptoms: chatHistory.summary.symptoms,
-    aiSummary: formatAISummary(chatHistory.summary),
-    originalBooking: {
-      doctorId,
-      date: new Date(date),
-      timeSlot,
-    },
-  });
+            // For Panchakarma: reserve therapist and room slots
+            if (queueType === "panchakarma" && therapistId && roomId) {
+                const slotDate = new Date(
+                    appointmentDate.toISOString().slice(0, 10),
+                );
 
-  chatHistory.appointmentId = appointment._id;
-  await chatHistory.save();
+                const [existingTherapist, existingRoom] = await Promise.all([
+                    TherapyResourceModel.findOne(
+                        { date: slotDate, therapistId, slot: timeSlot },
+                        null,
+                        { session },
+                    ),
+                    TherapyResourceModel.findOne(
+                        { date: slotDate, roomId, slot: timeSlot },
+                        null,
+                        { session },
+                    ),
+                ]);
 
-  const doctorUser =
-    await UserModel.findById(doctorId).select("name email phone");
-  const patientUser = await UserModel.findById(userId).select("email");
+                if (existingTherapist?.status === "booked") {
+                    throw Object.assign(
+                        new Error(
+                            "Selected therapist is already booked for this slot",
+                        ),
+                        { statusCode: 409 },
+                    );
+                }
+                if (existingRoom?.status === "booked") {
+                    throw Object.assign(
+                        new Error(
+                            "Selected room is already booked for this slot",
+                        ),
+                        { statusCode: 409 },
+                    );
+                }
 
-  // Fire-and-forget email notification
-  notifyAppointmentBooked(patientUser.email, {
-    doctorName: doctorUser.name,
-    date: appointment.date,
-    timeSlot: appointment.timeSlot,
-    urgencyLevel,
-  });
+                await Promise.all([
+                    TherapyResourceModel.findOneAndUpdate(
+                        { date: slotDate, therapistId, slot: timeSlot },
+                        {
+                            $set: {
+                                status: "booked",
+                                appointmentId: appointment._id,
+                                roomId: null,
+                            },
+                        },
+                        { upsert: true, session },
+                    ),
+                    TherapyResourceModel.findOneAndUpdate(
+                        { date: slotDate, roomId, slot: timeSlot },
+                        {
+                            $set: {
+                                status: "booked",
+                                appointmentId: appointment._id,
+                                therapistId: null,
+                            },
+                        },
+                        { upsert: true, session },
+                    ),
+                ]);
+            }
 
-  return {
-    appointmentId: appointment._id,
-    status: appointment.status,
-    urgencyLevel: appointment.urgencyLevel,
-    doctor: {
-      name: doctorUser.name,
-      specialization: doctor.specialization,
-    },
-    date: appointment.date,
-    timeSlot: appointment.timeSlot,
-    estimatedApprovalTime:
-      urgencyLevel === "emergency"
-        ? "Admin will review within 30 minutes"
-        : "Admin will review within 24 hours",
-  };
+            chatHistory.appointmentId = appointment._id;
+            await chatHistory.save({ session });
+        });
+    } finally {
+        session.endSession();
+    }
+
+    const [doctorUser, patientUser] = await Promise.all([
+        UserModel.findById(doctorId).select("name email phone"),
+        UserModel.findById(userId).select("email"),
+    ]);
+
+    // Fire-and-forget email notification
+    notifyAppointmentBooked(patientUser.email, {
+        doctorName: doctorUser.name,
+        date: appointment.date,
+        timeSlot: appointment.timeSlot,
+        urgencyLevel,
+    });
+
+    return {
+        appointmentId: appointment._id,
+        status: appointment.status,
+        urgencyLevel: appointment.urgencyLevel,
+        queueType: appointment.queueType,
+        tokenNumber: appointment.tokenNumber,
+        queueDate: appointment.queueDate,
+        doctor: {
+            name: doctorUser.name,
+            specialization: doctor.specialization,
+        },
+        date: appointment.date,
+        timeSlot: appointment.timeSlot,
+        estimatedApprovalTime:
+            urgencyLevel === "emergency"
+                ? "Admin will review within 30 minutes"
+                : "Admin will review within 24 hours",
+    };
+};
+
+// Returns treatment suggestions based on a completed conversation
+const getTreatmentSuggestionsForPatient = async (conversationId, userId) => {
+    const chatHistory = await ChatHistoryModel.findOne({
+        conversationId,
+        patientId: userId,
+    });
+
+    if (!chatHistory) {
+        const error = new Error("Conversation not found");
+        error.statusCode = 404;
+        throw error;
+    }
+
+    if (
+        chatHistory.status !== "completed" &&
+        chatHistory.status !== "emergency"
+    ) {
+        const error = new Error(
+            "Conversation not yet completed. Please end the chat first.",
+        );
+        error.statusCode = 400;
+        throw error;
+    }
+
+    return {
+        conversationId,
+        suggestedCarePath: chatHistory.summary?.suggestedCarePath || "normal",
+        urgencyLevel: chatHistory.summary?.urgencyLevel || "normal",
+        recommendedTreatmentCodes:
+            chatHistory.summary?.recommendedTreatmentCodes || [],
+        prakritiType: chatHistory.summary?.prakritiType || null,
+        preConsultNote: chatHistory.summary?.preConsultNote || null,
+    };
 };
 
 const getPatientAppointments = async (userId, status, query = {}) => {
-  const { page, limit, skip } = parsePagination(query);
-  const filter = { patientId: userId };
-  if (status) {
-    filter.status = status;
-  }
+    const { page, limit, skip } = parsePagination(query);
+    const filter = { patientId: userId };
+    if (status) {
+        filter.status = status;
+    }
 
-  const [appointments, totalCount] = await Promise.all([
-    AppointmentModel.find(filter)
-      .populate("doctorId", "name email phone profilePhoto")
-      .sort({ date: -1, createdAt: -1 })
-      .skip(skip)
-      .limit(limit),
-    AppointmentModel.countDocuments(filter),
-  ]);
+    const [appointments, totalCount] = await Promise.all([
+        AppointmentModel.find(filter)
+            .populate("doctorId", "name email phone profilePhoto")
+            .sort({ date: -1, createdAt: -1 })
+            .skip(skip)
+            .limit(limit),
+        AppointmentModel.countDocuments(filter),
+    ]);
 
-  // Batch fetch all doctor profiles in one query instead of N+1
-  const doctorUserIds = appointments.map((apt) => apt.doctorId._id);
-  const doctorProfiles = await DoctorModel.find({
-    userId: { $in: doctorUserIds },
-  }).select("userId specialization qualification experience consultationFee");
-  const doctorMap = new Map(
-    doctorProfiles.map((d) => [d.userId.toString(), d]),
-  );
+    // Batch fetch all doctor profiles in one query instead of N+1
+    const doctorUserIds = appointments.map((apt) => apt.doctorId._id);
+    const doctorProfiles = await DoctorModel.find({
+        userId: { $in: doctorUserIds },
+    }).select("userId specialization qualification experience consultationFee");
+    const doctorMap = new Map(
+        doctorProfiles.map((d) => [d.userId.toString(), d]),
+    );
 
-  const appointmentsWithDetails = appointments.map((apt) => {
-    const doctor = doctorMap.get(apt.doctorId._id.toString());
+    const appointmentsWithDetails = appointments.map((apt) => {
+        const doctor = doctorMap.get(apt.doctorId._id.toString());
+
+        return {
+            appointmentId: apt._id,
+            status: apt.status,
+            urgencyLevel: apt.urgencyLevel,
+            date: apt.date,
+            timeSlot: apt.timeSlot,
+            symptoms: apt.symptoms,
+            doctor: {
+                userId: apt.doctorId._id,
+                name: apt.doctorId.name,
+                email: apt.doctorId.email,
+                phone: apt.doctorId.phone,
+                profilePhoto: apt.doctorId.profilePhoto,
+                specialization: doctor?.specialization,
+                qualification: doctor?.qualification,
+                consultationFee: doctor?.consultationFee,
+            },
+            createdAt: apt.createdAt,
+            adminNotes: apt.adminNotes,
+        };
+    });
 
     return {
-      appointmentId: apt._id,
-      status: apt.status,
-      urgencyLevel: apt.urgencyLevel,
-      date: apt.date,
-      timeSlot: apt.timeSlot,
-      symptoms: apt.symptoms,
-      doctor: {
-        userId: apt.doctorId._id,
-        name: apt.doctorId.name,
-        email: apt.doctorId.email,
-        phone: apt.doctorId.phone,
-        profilePhoto: apt.doctorId.profilePhoto,
-        specialization: doctor?.specialization,
-        qualification: doctor?.qualification,
-        consultationFee: doctor?.consultationFee,
-      },
-      createdAt: apt.createdAt,
-      adminNotes: apt.adminNotes,
+        count: appointmentsWithDetails.length,
+        totalCount,
+        page,
+        totalPages: Math.ceil(totalCount / limit),
+        appointments: appointmentsWithDetails,
     };
-  });
-
-  return {
-    count: appointmentsWithDetails.length,
-    totalCount,
-    page,
-    totalPages: Math.ceil(totalCount / limit),
-    appointments: appointmentsWithDetails,
-  };
 };
 
 const getAppointmentDetails = async (userId, appointmentId) => {
-  const appointment = await AppointmentModel.findOne({
-    _id: appointmentId,
-    patientId: userId,
-  })
-    .populate("doctorId", "name email phone profilePhoto")
-    .populate("adminApprovedBy", "name");
+    const appointment = await AppointmentModel.findOne({
+        _id: appointmentId,
+        patientId: userId,
+    })
+        .populate("doctorId", "name email phone profilePhoto")
+        .populate("adminApprovedBy", "name");
 
-  if (!appointment) {
-    const error = new Error("Appointment not found");
-    error.statusCode = 404;
-    throw error;
-  }
+    if (!appointment) {
+        const error = new Error("Appointment not found");
+        error.statusCode = 404;
+        throw error;
+    }
 
-  const doctor = await DoctorModel.findOne({
-    userId: appointment.doctorId._id,
-  });
+    const doctor = await DoctorModel.findOne({
+        userId: appointment.doctorId._id,
+    });
 
-  const chatHistory = await ChatHistoryModel.findOne({
-    conversationId: appointment.chatConversationId,
-  }).select("messages summary");
+    const chatHistory = await ChatHistoryModel.findOne({
+        conversationId: appointment.chatConversationId,
+    }).select("messages summary");
 
-  return {
-    appointment: {
-      id: appointment._id,
-      status: appointment.status,
-      urgencyLevel: appointment.urgencyLevel,
-      date: appointment.date,
-      timeSlot: appointment.timeSlot,
-      symptoms: appointment.symptoms,
-      aiSummary: appointment.aiSummary,
-      adminNotes: appointment.adminNotes,
-      doctorNotes: appointment.doctorNotes,
-      prescription: appointment.prescription,
-      adminApprovedBy: appointment.adminApprovedBy?.name,
-      adminApprovedAt: appointment.adminApprovedAt,
-      createdAt: appointment.createdAt,
-    },
-    doctor: {
-      name: appointment.doctorId.name,
-      email: appointment.doctorId.email,
-      phone: appointment.doctorId.phone,
-      specialization: doctor?.specialization,
-      qualification: doctor?.qualification,
-      experience: doctor?.experience,
-    },
-    chatSummary: chatHistory?.summary,
-  };
+    return {
+        appointment: {
+            id: appointment._id,
+            status: appointment.status,
+            urgencyLevel: appointment.urgencyLevel,
+            date: appointment.date,
+            timeSlot: appointment.timeSlot,
+            symptoms: appointment.symptoms,
+            aiSummary: appointment.aiSummary,
+            adminNotes: appointment.adminNotes,
+            doctorNotes: appointment.doctorNotes,
+            prescription: appointment.prescription,
+            adminApprovedBy: appointment.adminApprovedBy?.name,
+            adminApprovedAt: appointment.adminApprovedAt,
+            createdAt: appointment.createdAt,
+        },
+        doctor: {
+            name: appointment.doctorId.name,
+            email: appointment.doctorId.email,
+            phone: appointment.doctorId.phone,
+            specialization: doctor?.specialization,
+            qualification: doctor?.qualification,
+            experience: doctor?.experience,
+        },
+        chatSummary: chatHistory?.summary,
+    };
 };
 
 const cancelAppointment = async (userId, appointmentId) => {
-  const appointment = await AppointmentModel.findOne({
-    _id: appointmentId,
-    patientId: userId,
-  });
+    const appointment = await AppointmentModel.findOne({
+        _id: appointmentId,
+        patientId: userId,
+    });
 
-  if (!appointment) {
-    const error = new Error("Appointment not found");
-    error.statusCode = 404;
-    throw error;
-  }
+    if (!appointment) {
+        const error = new Error("Appointment not found");
+        error.statusCode = 404;
+        throw error;
+    }
 
-  if (!["pending_admin_approval", "confirmed"].includes(appointment.status)) {
-    const error = new Error(
-      `Cannot cancel appointment with status: ${appointment.status}`,
-    );
-    error.statusCode = 400;
-    throw error;
-  }
+    if (!["pending_admin_approval", "confirmed"].includes(appointment.status)) {
+        const error = new Error(
+            `Cannot cancel appointment with status: ${appointment.status}`,
+        );
+        error.statusCode = 400;
+        throw error;
+    }
 
-  // Fetch details for notification before cancelling
-  const [patientUser, doctorUser] = await Promise.all([
-    UserModel.findById(userId).select("email"),
-    UserModel.findById(appointment.doctorId).select("name"),
-  ]);
+    // Fetch details for notification before cancelling
+    const [patientUser, doctorUser] = await Promise.all([
+        UserModel.findById(userId).select("email"),
+        UserModel.findById(appointment.doctorId).select("name"),
+    ]);
 
-  await appointment.cancel("Cancelled by patient");
+    await appointment.cancel("Cancelled by patient");
 
-  // Fire-and-forget email notification
-  notifyAppointmentCancelled(patientUser.email, {
-    doctorName: doctorUser?.name || "N/A",
-    date: appointment.date,
-    timeSlot: appointment.timeSlot,
-  });
+    // Fire-and-forget email notification
+    notifyAppointmentCancelled(patientUser.email, {
+        doctorName: doctorUser?.name || "N/A",
+        date: appointment.date,
+        timeSlot: appointment.timeSlot,
+    });
 };
 
 const getVerifiedDoctors = async (specialization, query = {}) => {
-  const { page, limit, skip } = parsePagination(query);
-  const doctorQuery = { isVerified: true };
-  if (specialization) {
-    const escaped = specialization.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    doctorQuery.specialization = { $regex: new RegExp(`^${escaped}$`, "i") };
-  }
+    const { page, limit, skip } = parsePagination(query);
+    const doctorQuery = { isVerified: true };
+    if (specialization) {
+        const escaped = specialization.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        doctorQuery.specialization = {
+            $regex: new RegExp(`^${escaped}$`, "i"),
+        };
+    }
 
-  const [doctors, totalCount] = await Promise.all([
-    DoctorModel.find(doctorQuery).skip(skip).limit(limit),
-    DoctorModel.countDocuments(doctorQuery),
-  ]);
-  const doctorUserIds = doctors.map((d) => d.userId);
+    const [doctors, totalCount] = await Promise.all([
+        DoctorModel.find(doctorQuery).skip(skip).limit(limit),
+        DoctorModel.countDocuments(doctorQuery),
+    ]);
+    const doctorUserIds = doctors.map((d) => d.userId);
 
-  const users = await UserModel.find({
-    _id: { $in: doctorUserIds },
-    isActive: true,
-  }).select("name email phone gender profilePhoto");
+    const users = await UserModel.find({
+        _id: { $in: doctorUserIds },
+        isActive: true,
+    }).select("name email phone gender profilePhoto");
 
-  const doctorList = doctors
-    .map((doc) => {
-      const user = users.find(
-        (u) => u._id.toString() === doc.userId.toString(),
-      );
-      if (!user) return null;
-      return {
-        doctorId: doc.userId,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        gender: user.gender,
-        profilePhoto: user.profilePhoto,
-        specialization: doc.specialization,
-        qualification: doc.qualification,
-        experience: doc.experience,
-        consultationFee: doc.consultationFee,
-      };
-    })
-    .filter(Boolean);
+    const doctorList = doctors
+        .map((doc) => {
+            const user = users.find(
+                (u) => u._id.toString() === doc.userId.toString(),
+            );
+            if (!user) return null;
+            return {
+                doctorId: doc.userId,
+                name: user.name,
+                email: user.email,
+                phone: user.phone,
+                gender: user.gender,
+                profilePhoto: user.profilePhoto,
+                specialization: doc.specialization,
+                qualification: doc.qualification,
+                experience: doc.experience,
+                consultationFee: doc.consultationFee,
+            };
+        })
+        .filter(Boolean);
 
-  return {
-    count: doctorList.length,
-    totalCount,
-    page,
-    totalPages: Math.ceil(totalCount / limit),
-    doctors: doctorList,
-  };
+    return {
+        count: doctorList.length,
+        totalCount,
+        page,
+        totalPages: Math.ceil(totalCount / limit),
+        doctors: doctorList,
+    };
 };
 
 const getPatientProfile = async (userId) => {
-  const [user, patient] = await Promise.all([
-    UserModel.findById(userId).select(
-      "name email phone gender dob addresses profilePhoto",
-    ),
-    PatientModel.findOne({ userId }),
-  ]);
+    const [user, patient] = await Promise.all([
+        UserModel.findById(userId).select(
+            "name email phone gender dob addresses profilePhoto",
+        ),
+        PatientModel.findOne({ userId }),
+    ]);
 
-  if (!user) {
-    const err = new Error("User not found");
-    err.statusCode = 404;
-    throw err;
-  }
+    if (!user) {
+        const err = new Error("User not found");
+        err.statusCode = 404;
+        throw err;
+    }
 
-  return {
-    user: {
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      gender: user.gender,
-      dob: user.dob,
-      addresses: user.addresses,
-      profilePhoto: user.profilePhoto,
-    },
-    medical: {
-      mrn: patient?.mrn || null,
-      bloodGroup: patient?.bloodGroup || null,
-      medicalHistory: patient?.medicalHistory || [],
-      allergies: patient?.allergies || [],
-      emergencyContact: patient?.emergencyContact || {},
-    },
-  };
+    return {
+        user: {
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            gender: user.gender,
+            dob: user.dob,
+            addresses: user.addresses,
+            profilePhoto: user.profilePhoto,
+        },
+        medical: {
+            mrn: patient?.mrn || null,
+            bloodGroup: patient?.bloodGroup || null,
+            medicalHistory: patient?.medicalHistory || [],
+            allergies: patient?.allergies || [],
+            emergencyContact: patient?.emergencyContact || {},
+        },
+    };
 };
 
 const updatePatientProfile = async (userId, updates) => {
-  const {
-    name,
-    phone,
-    gender,
-    dob,
-    addresses,
-    bloodGroup,
-    medicalHistory,
-    allergies,
-    emergencyContact,
-  } = updates;
+    const {
+        name,
+        phone,
+        gender,
+        dob,
+        addresses,
+        bloodGroup,
+        medicalHistory,
+        allergies,
+        emergencyContact,
+    } = updates;
 
-  // Update user fields
-  const userUpdates = {};
-  if (name !== undefined) userUpdates.name = name;
-  if (phone !== undefined) userUpdates.phone = phone;
-  if (gender !== undefined) userUpdates.gender = gender;
-  if (dob !== undefined) userUpdates.dob = dob;
-  if (addresses !== undefined) userUpdates.addresses = addresses;
+    // Update user fields
+    const userUpdates = {};
+    if (name !== undefined) userUpdates.name = name;
+    if (phone !== undefined) userUpdates.phone = phone;
+    if (gender !== undefined) userUpdates.gender = gender;
+    if (dob !== undefined) userUpdates.dob = dob;
+    if (addresses !== undefined) userUpdates.addresses = addresses;
 
-  // Update patient medical fields
-  const patientUpdates = {};
-  if (bloodGroup !== undefined) patientUpdates.bloodGroup = bloodGroup;
-  if (medicalHistory !== undefined)
-    patientUpdates.medicalHistory = medicalHistory;
-  if (allergies !== undefined) patientUpdates.allergies = allergies;
-  if (emergencyContact !== undefined)
-    patientUpdates.emergencyContact = emergencyContact;
+    // Update patient medical fields
+    const patientUpdates = {};
+    if (bloodGroup !== undefined) patientUpdates.bloodGroup = bloodGroup;
+    if (medicalHistory !== undefined)
+        patientUpdates.medicalHistory = medicalHistory;
+    if (allergies !== undefined) patientUpdates.allergies = allergies;
+    if (emergencyContact !== undefined)
+        patientUpdates.emergencyContact = emergencyContact;
 
-  const [user, patient] = await Promise.all([
-    Object.keys(userUpdates).length > 0
-      ? UserModel.findByIdAndUpdate(userId, userUpdates, { new: true }).select(
-          "name email phone gender dob addresses profilePhoto",
-        )
-      : UserModel.findById(userId).select(
-          "name email phone gender dob addresses profilePhoto",
-        ),
-    Object.keys(patientUpdates).length > 0
-      ? PatientModel.findOneAndUpdate({ userId }, patientUpdates, { new: true })
-      : PatientModel.findOne({ userId }),
-  ]);
+    const [user, patient] = await Promise.all([
+        Object.keys(userUpdates).length > 0
+            ? UserModel.findByIdAndUpdate(userId, userUpdates, {
+                  new: true,
+              }).select("name email phone gender dob addresses profilePhoto")
+            : UserModel.findById(userId).select(
+                  "name email phone gender dob addresses profilePhoto",
+              ),
+        Object.keys(patientUpdates).length > 0
+            ? PatientModel.findOneAndUpdate({ userId }, patientUpdates, {
+                  new: true,
+              })
+            : PatientModel.findOne({ userId }),
+    ]);
 
-  return {
-    user: {
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      gender: user.gender,
-      dob: user.dob,
-      addresses: user.addresses,
-      profilePhoto: user.profilePhoto,
-    },
-    medical: {
-      mrn: patient?.mrn || null,
-      bloodGroup: patient?.bloodGroup || null,
-      medicalHistory: patient?.medicalHistory || [],
-      allergies: patient?.allergies || [],
-      emergencyContact: patient?.emergencyContact || {},
-    },
-  };
+    return {
+        user: {
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            gender: user.gender,
+            dob: user.dob,
+            addresses: user.addresses,
+            profilePhoto: user.profilePhoto,
+        },
+        medical: {
+            mrn: patient?.mrn || null,
+            bloodGroup: patient?.bloodGroup || null,
+            medicalHistory: patient?.medicalHistory || [],
+            allergies: patient?.allergies || [],
+            emergencyContact: patient?.emergencyContact || {},
+        },
+    };
 };
 
 module.exports = {
-  getPatientDashboard,
-  applyForDoctorRole,
-  getAvailableSlots,
-  bookAppointment,
-  getPatientAppointments,
-  getAppointmentDetails,
-  cancelAppointment,
-  getVerifiedDoctors,
-  getPatientProfile,
-  updatePatientProfile,
+    getPatientDashboard,
+    applyForDoctorRole,
+    getAvailableSlots,
+    bookAppointment,
+    getPatientAppointments,
+    getAppointmentDetails,
+    cancelAppointment,
+    getVerifiedDoctors,
+    getPatientProfile,
+    updatePatientProfile,
+    getTreatmentSuggestionsForPatient,
 };
