@@ -121,47 +121,6 @@ const appointmentSchema = new Schema(
         feedback: {
             type: String,
         },
-        // --- Phase 1: Revised architecture fields ---
-        queueType: {
-            type: String,
-            enum: ["normal", "ayurveda", "panchakarma"],
-            default: "normal",
-        },
-        tokenNumber: {
-            type: String,
-            default: null,
-            trim: true,
-        },
-        queueDate: {
-            type: String, // "YYYY-MM-DD" — matches QueueTokenModel key
-            default: null,
-        },
-        tokenSequence: {
-            type: Number,
-            default: null,
-        },
-        treatmentCode: {
-            type: String,
-            ref: "treatment",
-            default: null,
-            trim: true,
-            uppercase: true,
-        },
-        therapistId: {
-            type: Schema.Types.ObjectId,
-            ref: "user",
-            default: null,
-        },
-        roomId: {
-            type: String,
-            default: null,
-            trim: true,
-        },
-        languagePreference: {
-            type: String,
-            default: "english",
-            trim: true,
-        },
     },
     {
         timestamps: true,

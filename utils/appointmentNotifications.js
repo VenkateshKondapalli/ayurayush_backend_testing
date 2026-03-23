@@ -31,18 +31,18 @@ const buildEmailHtml = (title, body) => `
 
 // Fire-and-forget wrapper — logs errors but never throws
 const sendNotification = async (toEmail, subject, title, body) => {
-  try {
-    await sendEmail(toEmail, subject, buildEmailHtml(title, body));
-  } catch (err) {
-    console.error(`Notification email failed (${subject}):`, err.message);
-  }
+    try {
+        await sendEmail(toEmail, subject, buildEmailHtml(title, body));
+    } catch (err) {
+        console.error(`Notification email failed (${subject}):`, err.message);
+    }
 };
 
 const notifyAppointmentBooked = (
-  patientEmail,
-  { doctorName, date, timeSlot, urgencyLevel },
+    patientEmail,
+    { doctorName, date, timeSlot, urgencyLevel },
 ) => {
-  const body = `
+    const body = `
     <p>Your appointment has been submitted and is awaiting admin approval.</p>
     <div class="detail">
       <p><strong>Doctor:</strong> ${doctorName}</p>
@@ -51,19 +51,19 @@ const notifyAppointmentBooked = (
       <p><strong>Urgency:</strong> ${urgencyLevel}</p>
     </div>
     <p>You will receive another email once the admin reviews your appointment.</p>`;
-  sendNotification(
-    patientEmail,
-    "Appointment Booked - AyurAyush",
-    "Appointment Submitted",
-    body,
-  );
+    sendNotification(
+        patientEmail,
+        "Appointment Booked - AyurAyush",
+        "Appointment Submitted",
+        body,
+    );
 };
 
 const notifyAppointmentApproved = (
-  patientEmail,
-  { doctorName, date, timeSlot },
+    patientEmail,
+    { doctorName, date, timeSlot },
 ) => {
-  const body = `
+    const body = `
     <p>Your appointment has been <strong>approved</strong> by the admin.</p>
     <div class="detail">
       <p><strong>Doctor:</strong> ${doctorName}</p>
@@ -71,19 +71,19 @@ const notifyAppointmentApproved = (
       <p><strong>Time:</strong> ${timeSlot}</p>
     </div>
     <p>Please arrive on time for your consultation.</p>`;
-  sendNotification(
-    patientEmail,
-    "Appointment Approved - AyurAyush",
-    "Appointment Confirmed",
-    body,
-  );
+    sendNotification(
+        patientEmail,
+        "Appointment Approved - AyurAyush",
+        "Appointment Confirmed",
+        body,
+    );
 };
 
 const notifyAppointmentRejected = (
-  patientEmail,
-  { doctorName, date, reason },
+    patientEmail,
+    { doctorName, date, reason },
 ) => {
-  const body = `
+    const body = `
     <p>Unfortunately, your appointment has been <strong>rejected</strong>.</p>
     <div class="detail">
       <p><strong>Doctor:</strong> ${doctorName}</p>
@@ -91,19 +91,19 @@ const notifyAppointmentRejected = (
       <p><strong>Reason:</strong> ${reason || "No reason provided"}</p>
     </div>
     <p>You can book a new appointment with a different doctor or time slot.</p>`;
-  sendNotification(
-    patientEmail,
-    "Appointment Rejected - AyurAyush",
-    "Appointment Rejected",
-    body,
-  );
+    sendNotification(
+        patientEmail,
+        "Appointment Rejected - AyurAyush",
+        "Appointment Rejected",
+        body,
+    );
 };
 
 const notifyAppointmentCompleted = (
-  patientEmail,
-  { doctorName, date, hasPrescription },
+    patientEmail,
+    { doctorName, date, hasPrescription },
 ) => {
-  const body = `
+    const body = `
     <p>Your appointment has been marked as <strong>completed</strong>.</p>
     <div class="detail">
       <p><strong>Doctor:</strong> ${doctorName}</p>
@@ -111,19 +111,19 @@ const notifyAppointmentCompleted = (
       ${hasPrescription ? "<p><strong>Prescription:</strong> Available in your dashboard</p>" : ""}
     </div>
     <p>Thank you for visiting AyurAyush. We wish you a speedy recovery!</p>`;
-  sendNotification(
-    patientEmail,
-    "Appointment Completed - AyurAyush",
-    "Appointment Completed",
-    body,
-  );
+    sendNotification(
+        patientEmail,
+        "Appointment Completed - AyurAyush",
+        "Appointment Completed",
+        body,
+    );
 };
 
 const notifyAppointmentCancelled = (
-  patientEmail,
-  { doctorName, date, timeSlot },
+    patientEmail,
+    { doctorName, date, timeSlot },
 ) => {
-  const body = `
+    const body = `
     <p>Your appointment has been <strong>cancelled</strong> as requested.</p>
     <div class="detail">
       <p><strong>Doctor:</strong> ${doctorName}</p>
@@ -131,18 +131,18 @@ const notifyAppointmentCancelled = (
       <p><strong>Time:</strong> ${timeSlot}</p>
     </div>
     <p>You can book a new appointment anytime from your dashboard.</p>`;
-  sendNotification(
-    patientEmail,
-    "Appointment Cancelled - AyurAyush",
-    "Appointment Cancelled",
-    body,
-  );
+    sendNotification(
+        patientEmail,
+        "Appointment Cancelled - AyurAyush",
+        "Appointment Cancelled",
+        body,
+    );
 };
 
 module.exports = {
-  notifyAppointmentBooked,
-  notifyAppointmentApproved,
-  notifyAppointmentRejected,
-  notifyAppointmentCompleted,
-  notifyAppointmentCancelled,
+    notifyAppointmentBooked,
+    notifyAppointmentApproved,
+    notifyAppointmentRejected,
+    notifyAppointmentCompleted,
+    notifyAppointmentCancelled,
 };

@@ -2,64 +2,64 @@ const mongoose = require("mongoose");
 const { Schema, model } = mongoose;
 
 const doctorSchema = new Schema(
-  {
-    userId: {
-      type: Schema.Types.ObjectId,
-      ref: "user",
-      required: true,
-      unique: true,
-    },
+    {
+        userId: {
+            type: Schema.Types.ObjectId,
+            ref: "user",
+            required: true,
+            unique: true,
+        },
 
-    specialization: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+        specialization: {
+            type: String,
+            required: true,
+            trim: true,
+        },
 
-    qualification: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+        qualification: {
+            type: String,
+            required: true,
+            trim: true,
+        },
 
-    experience: {
-      type: Number,
-      required: true,
-      min: [0, "Experience cannot be negative"],
-    },
+        experience: {
+            type: Number,
+            required: true,
+            min: [0, "Experience cannot be negative"],
+        },
 
-    licenseNumber: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+        licenseNumber: {
+            type: String,
+            required: true,
+            trim: true,
+        },
 
-    consultationFee: {
-      type: Number,
-      min: [0, "Consultation fee cannot be negative"],
-    },
+        consultationFee: {
+            type: Number,
+            min: [0, "Consultation fee cannot be negative"],
+        },
 
-    availableModes: {
-      type: [String],
-      enum: ["offline", "online"],
-      default: [],
-    },
+        availableModes: {
+            type: [String],
+            enum: ["offline", "online"],
+            default: [],
+        },
 
-    // -------- Admin-controlled --------
-    isVerified: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
+        // -------- Admin-controlled --------
+        isVerified: {
+            type: Boolean,
+            default: false,
+            index: true,
+        },
 
-    verifiedAt: {
-      type: Date,
+        verifiedAt: {
+            type: Date,
+        },
     },
-  },
-  {
-    timestamps: true,
-    versionKey: false,
-  },
+    {
+        timestamps: true,
+        versionKey: false,
+    },
 );
 
 const DoctorModel = model("doctor", doctorSchema);

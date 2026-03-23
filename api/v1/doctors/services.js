@@ -5,369 +5,382 @@ const { PatientModel } = require("../../../models/patientSchema");
 const { UserModel } = require("../../../models/userSchema");
 const { calculateAge, parsePagination } = require("../../../utils/helpers");
 const {
-  notifyAppointmentCompleted,
+    notifyAppointmentCompleted,
 } = require("../../../utils/appointmentNotifications");
 
 const getDoctorDashboard = async (userId) => {
-  let doctor = await DoctorModel.findOne({ userId });
+    console.log("-----🟢 inside getDoctorDashboard-------");
+    let doctor = await DoctorModel.findOne({ userId });
 
-  if (!doctor) {
-    doctor = await DoctorModel.create({
-      userId,
-      specialization: null,
-      experience: null,
-      isVerified: false,
-    });
-  }
+    if (!doctor) {
+        doctor = await DoctorModel.create({
+            userId,
+            specialization: null,
+            experience: null,
+            isVerified: false,
+        });
+    }
 
-  return {
-    doctorId: doctor._id,
-    userId: doctor.userId,
-    specialization: doctor.specialization,
-    experience: doctor.experience,
-    isVerified: doctor.isVerified,
-    createdAt: doctor.createdAt,
-  };
+    return {
+        doctorId: doctor._id,
+        userId: doctor.userId,
+        specialization: doctor.specialization,
+        experience: doctor.experience,
+        isVerified: doctor.isVerified,
+        createdAt: doctor.createdAt,
+    };
 };
 
 const getDoctorAppointments = async (
-  userId,
-  { status, date, page: rawPage, limit: rawLimit },
+    userId,
+    { status, date, page: rawPage, limit: rawLimit },
 ) => {
-  const { page, limit, skip } = parsePagination({
-    page: rawPage,
-    limit: rawLimit,
-  });
-  const query = {
-    doctorId: userId,
-    status: { $nin: ["rejected"] },
-  };
-
-  if (status) query.status = status;
-  if (date) {
-    query.date = {
-      $gte: new Date(date).setHours(0, 0, 0, 0),
-      $lte: new Date(date).setHours(23, 59, 59, 999),
+    console.log("-----🟢 inside getDoctorAppointments-------");
+    const { page, limit, skip } = parsePagination({
+        page: rawPage,
+        limit: rawLimit,
+    });
+    const query = {
+        doctorId: userId,
+        status: { $nin: ["rejected"] },
     };
-  }
 
-  const [appointments, totalCount] = await Promise.all([
-    AppointmentModel.find(query)
-      .populate("patientId", "name email phone gender dob profilePhoto")
-      .sort({ date: 1, timeSlot: 1 })
-      .skip(skip)
-      .limit(limit),
-    AppointmentModel.countDocuments(query),
-  ]);
+    if (status) query.status = status;
+    if (date) {
+        query.date = {
+            $gte: new Date(date).setHours(0, 0, 0, 0),
+            $lte: new Date(date).setHours(23, 59, 59, 999),
+        };
+    }
 
-  // Batch fetch all patient profiles in one query instead of N+1
-  const patientUserIds = appointments.map((apt) => apt.patientId._id);
-  const patientProfiles = await PatientModel.find({
-    userId: { $in: patientUserIds },
-  }).select("userId bloodGroup allergies medicalHistory");
-  const profileMap = new Map(
-    patientProfiles.map((p) => [p.userId.toString(), p]),
-  );
+    const [appointments, totalCount] = await Promise.all([
+        AppointmentModel.find(query)
+            .populate("patientId", "name email phone gender dob profilePhoto")
+            .sort({ date: 1, timeSlot: 1 })
+            .skip(skip)
+            .limit(limit),
+        AppointmentModel.countDocuments(query),
+    ]);
 
-  const appointmentsWithDetails = appointments.map((apt) => {
-    const patientProfile = profileMap.get(apt.patientId._id.toString());
+    // Batch fetch all patient profiles in one query instead of N+1
+    const patientUserIds = appointments.map((apt) => apt.patientId._id);
+    const patientProfiles = await PatientModel.find({
+        userId: { $in: patientUserIds },
+    }).select("userId bloodGroup allergies medicalHistory");
+    const profileMap = new Map(
+        patientProfiles.map((p) => [p.userId.toString(), p]),
+    );
+
+    const appointmentsWithDetails = appointments.map((apt) => {
+        const patientProfile = profileMap.get(apt.patientId._id.toString());
+
+        return {
+            appointmentId: apt._id,
+            status: apt.status,
+            urgencyLevel: apt.urgencyLevel,
+            patient: {
+                id: apt.patientId._id,
+                name: apt.patientId.name,
+                email: apt.patientId.email,
+                phone: apt.patientId.phone,
+                gender: apt.patientId.gender,
+                age: calculateAge(apt.patientId.dob),
+                profilePhoto: apt.patientId.profilePhoto,
+                bloodGroup: patientProfile?.bloodGroup,
+                allergies: patientProfile?.allergies || [],
+            },
+            appointmentDetails: {
+                date: apt.date,
+                timeSlot: apt.timeSlot,
+                symptoms: apt.symptoms,
+                aiSummary: apt.aiSummary,
+            },
+            isEmergency: apt.urgencyLevel === "emergency",
+            createdAt: apt.createdAt,
+        };
+    });
+
+    const emergencyAppointments = appointmentsWithDetails.filter(
+        (a) => a.urgencyLevel === "emergency",
+    );
+    const normalAppointments = appointmentsWithDetails.filter(
+        (a) => a.urgencyLevel === "normal",
+    );
 
     return {
-      appointmentId: apt._id,
-      status: apt.status,
-      urgencyLevel: apt.urgencyLevel,
-      patient: {
-        id: apt.patientId._id,
-        name: apt.patientId.name,
-        email: apt.patientId.email,
-        phone: apt.patientId.phone,
-        gender: apt.patientId.gender,
-        age: calculateAge(apt.patientId.dob),
-        profilePhoto: apt.patientId.profilePhoto,
-        bloodGroup: patientProfile?.bloodGroup,
-        allergies: patientProfile?.allergies || [],
-      },
-      appointmentDetails: {
-        date: apt.date,
-        timeSlot: apt.timeSlot,
-        symptoms: apt.symptoms,
-        aiSummary: apt.aiSummary,
-      },
-      isEmergency: apt.urgencyLevel === "emergency",
-      createdAt: apt.createdAt,
+        totalCount,
+        page,
+        totalPages: Math.ceil(totalCount / limit),
+        emergencyCount: emergencyAppointments.length,
+        normalCount: normalAppointments.length,
+        emergencyAppointments,
+        normalAppointments,
     };
-  });
-
-  const emergencyAppointments = appointmentsWithDetails.filter(
-    (a) => a.urgencyLevel === "emergency",
-  );
-  const normalAppointments = appointmentsWithDetails.filter(
-    (a) => a.urgencyLevel === "normal",
-  );
-
-  return {
-    totalCount,
-    page,
-    totalPages: Math.ceil(totalCount / limit),
-    emergencyCount: emergencyAppointments.length,
-    normalCount: normalAppointments.length,
-    emergencyAppointments,
-    normalAppointments,
-  };
 };
 
 const getTodayAppointments = async (userId) => {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
+    console.log("-----🟢 inside getTodayAppointments-------");
 
-  const appointments = await AppointmentModel.find({
-    doctorId: userId,
-    status: "confirmed",
-    date: { $gte: todayStart, $lte: todayEnd },
-  })
-    .populate("patientId", "name email phone gender dob profilePhoto")
-    .sort({ timeSlot: 1 });
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
 
-  // Batch fetch all patient profiles in one query
-  const patientUserIds = appointments.map((apt) => apt.patientId._id);
-  const patientProfiles = await PatientModel.find({
-    userId: { $in: patientUserIds },
-  }).select("userId bloodGroup allergies emergencyContact");
-  const profileMap = new Map(
-    patientProfiles.map((p) => [p.userId.toString(), p]),
-  );
+    const appointments = await AppointmentModel.find({
+        doctorId: userId,
+        status: "confirmed",
+        date: { $gte: todayStart, $lte: todayEnd },
+    })
+        .populate("patientId", "name email phone gender dob profilePhoto")
+        .sort({ timeSlot: 1 });
 
-  const appointmentsWithDetails = appointments.map((apt) => {
-    const patientProfile = profileMap.get(apt.patientId._id.toString());
+    // Batch fetch all patient profiles in one query
+    const patientUserIds = appointments.map((apt) => apt.patientId._id);
+    const patientProfiles = await PatientModel.find({
+        userId: { $in: patientUserIds },
+    }).select("userId bloodGroup allergies emergencyContact");
+    const profileMap = new Map(
+        patientProfiles.map((p) => [p.userId.toString(), p]),
+    );
+
+    const appointmentsWithDetails = appointments.map((apt) => {
+        const patientProfile = profileMap.get(apt.patientId._id.toString());
+
+        return {
+            appointmentId: apt._id,
+            urgencyLevel: apt.urgencyLevel,
+            timeSlot: apt.timeSlot,
+            patient: {
+                id: apt.patientId._id,
+                name: apt.patientId.name,
+                phone: apt.patientId.phone,
+                gender: apt.patientId.gender,
+                age: calculateAge(apt.patientId.dob),
+                bloodGroup: patientProfile?.bloodGroup,
+                allergies: patientProfile?.allergies || [],
+                emergencyContact: patientProfile?.emergencyContact,
+            },
+            symptoms: apt.symptoms,
+            aiSummary: apt.aiSummary,
+            isEmergency: apt.urgencyLevel === "emergency",
+        };
+    });
 
     return {
-      appointmentId: apt._id,
-      urgencyLevel: apt.urgencyLevel,
-      timeSlot: apt.timeSlot,
-      patient: {
-        id: apt.patientId._id,
-        name: apt.patientId.name,
-        phone: apt.patientId.phone,
-        gender: apt.patientId.gender,
-        age: calculateAge(apt.patientId.dob),
-        bloodGroup: patientProfile?.bloodGroup,
-        allergies: patientProfile?.allergies || [],
-        emergencyContact: patientProfile?.emergencyContact,
-      },
-      symptoms: apt.symptoms,
-      aiSummary: apt.aiSummary,
-      isEmergency: apt.urgencyLevel === "emergency",
+        date: new Date().toISOString().split("T")[0],
+        totalCount: appointmentsWithDetails.length,
+        appointments: appointmentsWithDetails,
     };
-  });
-
-  return {
-    date: new Date().toISOString().split("T")[0],
-    totalCount: appointmentsWithDetails.length,
-    appointments: appointmentsWithDetails,
-  };
 };
 
 const getAppointmentDetail = async (userId, appointmentId) => {
-  const appointment = await AppointmentModel.findOne({
-    _id: appointmentId,
-    doctorId: userId,
-  }).populate("patientId", "name email phone gender dob profilePhoto");
+    console.log("-----🟢 inside getAppointmentDetail-------");
 
-  if (!appointment) {
-    const err = new Error("Appointment not found");
-    err.statusCode = 404;
-    throw err;
-  }
+    const appointment = await AppointmentModel.findOne({
+        _id: appointmentId,
+        doctorId: userId,
+    }).populate("patientId", "name email phone gender dob profilePhoto");
 
-  const patientProfile = await PatientModel.findOne({
-    userId: appointment.patientId._id,
-  });
+    if (!appointment) {
+        const err = new Error("Appointment not found");
+        err.statusCode = 404;
+        throw err;
+    }
 
-  const chatHistory = await ChatHistoryModel.findOne({
-    conversationId: appointment.chatConversationId,
-  });
+    const patientProfile = await PatientModel.findOne({
+        userId: appointment.patientId._id,
+    });
 
-  return {
-    appointment: {
-      id: appointment._id,
-      status: appointment.status,
-      urgencyLevel: appointment.urgencyLevel,
-      date: appointment.date,
-      timeSlot: appointment.timeSlot,
-      symptoms: appointment.symptoms,
-      aiSummary: appointment.aiSummary,
-      doctorNotes: appointment.doctorNotes,
-      prescription: appointment.prescription,
-    },
-    patient: {
-      id: appointment.patientId._id,
-      name: appointment.patientId.name,
-      email: appointment.patientId.email,
-      phone: appointment.patientId.phone,
-      gender: appointment.patientId.gender,
-      age: calculateAge(appointment.patientId.dob),
-      profilePhoto: appointment.patientId.profilePhoto,
-      bloodGroup: patientProfile?.bloodGroup,
-      allergies: patientProfile?.allergies || [],
-      medicalHistory: patientProfile?.medicalHistory || [],
-      emergencyContact: patientProfile?.emergencyContact,
-    },
-    chatDetails: {
-      conversationId: chatHistory?.conversationId,
-      fullConversation: chatHistory?.messages,
-      summary: chatHistory?.summary,
-    },
-  };
+    const chatHistory = await ChatHistoryModel.findOne({
+        conversationId: appointment.chatConversationId,
+    });
+
+    return {
+        appointment: {
+            id: appointment._id,
+            status: appointment.status,
+            urgencyLevel: appointment.urgencyLevel,
+            date: appointment.date,
+            timeSlot: appointment.timeSlot,
+            symptoms: appointment.symptoms,
+            aiSummary: appointment.aiSummary,
+            doctorNotes: appointment.doctorNotes,
+            prescription: appointment.prescription,
+        },
+        patient: {
+            id: appointment.patientId._id,
+            name: appointment.patientId.name,
+            email: appointment.patientId.email,
+            phone: appointment.patientId.phone,
+            gender: appointment.patientId.gender,
+            age: calculateAge(appointment.patientId.dob),
+            profilePhoto: appointment.patientId.profilePhoto,
+            bloodGroup: patientProfile?.bloodGroup,
+            allergies: patientProfile?.allergies || [],
+            medicalHistory: patientProfile?.medicalHistory || [],
+            emergencyContact: patientProfile?.emergencyContact,
+        },
+        chatDetails: {
+            conversationId: chatHistory?.conversationId,
+            fullConversation: chatHistory?.messages,
+            summary: chatHistory?.summary,
+        },
+    };
 };
 
 const completeAppointment = async (
-  userId,
-  appointmentId,
-  { doctorNotes, prescription },
+    userId,
+    appointmentId,
+    { doctorNotes, prescription },
 ) => {
-  const appointment = await AppointmentModel.findOne({
-    _id: appointmentId,
-    doctorId: userId,
-  });
+    console.log("-----🟢 inside completeAppointment-------");
 
-  if (!appointment) {
-    const err = new Error("Appointment not found");
-    err.statusCode = 404;
-    throw err;
-  }
+    const appointment = await AppointmentModel.findOne({
+        _id: appointmentId,
+        doctorId: userId,
+    });
 
-  if (appointment.status !== "confirmed") {
-    const err = new Error("Only confirmed appointments can be completed");
-    err.statusCode = 400;
-    throw err;
-  }
+    if (!appointment) {
+        const err = new Error("Appointment not found");
+        err.statusCode = 404;
+        throw err;
+    }
 
-  await appointment.markCompleted(prescription, doctorNotes);
+    if (appointment.status !== "confirmed") {
+        const err = new Error("Only confirmed appointments can be completed");
+        err.statusCode = 400;
+        throw err;
+    }
 
-  // Fetch patient and doctor info for notification
-  const [patientUser, doctorUser] = await Promise.all([
-    UserModel.findById(appointment.patientId).select("email"),
-    UserModel.findById(userId).select("name"),
-  ]);
+    await appointment.markCompleted(prescription, doctorNotes);
 
-  // Fire-and-forget email notification
-  notifyAppointmentCompleted(patientUser.email, {
-    doctorName: doctorUser.name,
-    date: appointment.date,
-    hasPrescription: !!prescription,
-  });
+    // Fetch patient and doctor info for notification
+    const [patientUser, doctorUser] = await Promise.all([
+        UserModel.findById(appointment.patientId).select("email"),
+        UserModel.findById(userId).select("name"),
+    ]);
 
-  return {
-    appointmentId: appointment._id,
-    status: appointment.status,
-  };
+    // Fire-and-forget email notification
+    notifyAppointmentCompleted(patientUser.email, {
+        doctorName: doctorUser.name,
+        date: appointment.date,
+        hasPrescription: !!prescription,
+    });
+
+    return {
+        appointmentId: appointment._id,
+        status: appointment.status,
+    };
 };
 
 const getDoctorProfile = async (userId) => {
-  const [user, doctor] = await Promise.all([
-    UserModel.findById(userId).select(
-      "name email phone gender dob addresses profilePhoto",
-    ),
-    DoctorModel.findOne({ userId }),
-  ]);
+    console.log("-----🟢 inside getDoctorProfile-------");
 
-  if (!user) {
-    const err = new Error("User not found");
-    err.statusCode = 404;
-    throw err;
-  }
+    const [user, doctor] = await Promise.all([
+        UserModel.findById(userId).select(
+            "name email phone gender dob addresses profilePhoto",
+        ),
+        DoctorModel.findOne({ userId }),
+    ]);
 
-  return {
-    user: {
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      gender: user.gender,
-      dob: user.dob,
-      addresses: user.addresses,
-      profilePhoto: user.profilePhoto,
-    },
-    professional: {
-      specialization: doctor?.specialization,
-      qualification: doctor?.qualification,
-      experience: doctor?.experience,
-      licenseNumber: doctor?.licenseNumber,
-      consultationFee: doctor?.consultationFee,
-      availableModes: doctor?.availableModes || [],
-      isVerified: doctor?.isVerified || false,
-    },
-  };
+    if (!user) {
+        const err = new Error("User not found");
+        err.statusCode = 404;
+        throw err;
+    }
+
+    return {
+        user: {
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            gender: user.gender,
+            dob: user.dob,
+            addresses: user.addresses,
+            profilePhoto: user.profilePhoto,
+        },
+        professional: {
+            specialization: doctor?.specialization,
+            qualification: doctor?.qualification,
+            experience: doctor?.experience,
+            licenseNumber: doctor?.licenseNumber,
+            consultationFee: doctor?.consultationFee,
+            availableModes: doctor?.availableModes || [],
+            isVerified: doctor?.isVerified || false,
+        },
+    };
 };
 
 const updateDoctorProfile = async (userId, updates) => {
-  const {
-    name,
-    phone,
-    gender,
-    dob,
-    addresses,
-    consultationFee,
-    availableModes,
-  } = updates;
+    console.log("-----🟢 inside updateDoctorProfile-------");
+    const {
+        name,
+        phone,
+        gender,
+        dob,
+        addresses,
+        consultationFee,
+        availableModes,
+    } = updates;
 
-  // Update user fields
-  const userUpdates = {};
-  if (name !== undefined) userUpdates.name = name;
-  if (phone !== undefined) userUpdates.phone = phone;
-  if (gender !== undefined) userUpdates.gender = gender;
-  if (dob !== undefined) userUpdates.dob = dob;
-  if (addresses !== undefined) userUpdates.addresses = addresses;
+    // Update user fields
+    const userUpdates = {};
+    if (name !== undefined) userUpdates.name = name;
+    if (phone !== undefined) userUpdates.phone = phone;
+    if (gender !== undefined) userUpdates.gender = gender;
+    if (dob !== undefined) userUpdates.dob = dob;
+    if (addresses !== undefined) userUpdates.addresses = addresses;
 
-  // Update doctor-editable fields (not specialization/qualification/license — those go through admin)
-  const doctorUpdates = {};
-  if (consultationFee !== undefined)
-    doctorUpdates.consultationFee = consultationFee;
-  if (availableModes !== undefined)
-    doctorUpdates.availableModes = availableModes;
+    // Update doctor-editable fields (not specialization/qualification/license — those go through admin)
+    const doctorUpdates = {};
+    if (consultationFee !== undefined)
+        doctorUpdates.consultationFee = consultationFee;
+    if (availableModes !== undefined)
+        doctorUpdates.availableModes = availableModes;
 
-  const [user, doctor] = await Promise.all([
-    Object.keys(userUpdates).length > 0
-      ? UserModel.findByIdAndUpdate(userId, userUpdates, { new: true }).select(
-          "name email phone gender dob addresses profilePhoto",
-        )
-      : UserModel.findById(userId).select(
-          "name email phone gender dob addresses profilePhoto",
-        ),
-    Object.keys(doctorUpdates).length > 0
-      ? DoctorModel.findOneAndUpdate({ userId }, doctorUpdates, { new: true })
-      : DoctorModel.findOne({ userId }),
-  ]);
+    const [user, doctor] = await Promise.all([
+        Object.keys(userUpdates).length > 0
+            ? UserModel.findByIdAndUpdate(userId, userUpdates, {
+                  new: true,
+              }).select("name email phone gender dob addresses profilePhoto")
+            : UserModel.findById(userId).select(
+                  "name email phone gender dob addresses profilePhoto",
+              ),
+        Object.keys(doctorUpdates).length > 0
+            ? DoctorModel.findOneAndUpdate({ userId }, doctorUpdates, {
+                  new: true,
+              })
+            : DoctorModel.findOne({ userId }),
+    ]);
 
-  return {
-    user: {
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      gender: user.gender,
-      dob: user.dob,
-      addresses: user.addresses,
-      profilePhoto: user.profilePhoto,
-    },
-    professional: {
-      specialization: doctor?.specialization,
-      qualification: doctor?.qualification,
-      experience: doctor?.experience,
-      licenseNumber: doctor?.licenseNumber,
-      consultationFee: doctor?.consultationFee,
-      availableModes: doctor?.availableModes || [],
-      isVerified: doctor?.isVerified || false,
-    },
-  };
+    return {
+        user: {
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            gender: user.gender,
+            dob: user.dob,
+            addresses: user.addresses,
+            profilePhoto: user.profilePhoto,
+        },
+        professional: {
+            specialization: doctor?.specialization,
+            qualification: doctor?.qualification,
+            experience: doctor?.experience,
+            licenseNumber: doctor?.licenseNumber,
+            consultationFee: doctor?.consultationFee,
+            availableModes: doctor?.availableModes || [],
+            isVerified: doctor?.isVerified || false,
+        },
+    };
 };
 
 module.exports = {
-  getDoctorDashboard,
-  getDoctorAppointments,
-  getTodayAppointments,
-  getAppointmentDetail,
-  completeAppointment,
-  getDoctorProfile,
-  updateDoctorProfile,
+    getDoctorDashboard,
+    getDoctorAppointments,
+    getTodayAppointments,
+    getAppointmentDetail,
+    completeAppointment,
+    getDoctorProfile,
+    updateDoctorProfile,
 };

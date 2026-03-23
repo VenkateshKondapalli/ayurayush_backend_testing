@@ -1,14 +1,14 @@
 const express = require("express");
 const {
-  validateLoggedInUserMiddleware,
-  validatePatientRole,
+    validateLoggedInUserMiddleware,
+    validatePatientRole,
 } = require("../middlewares");
 const {
-  startConversationController,
-  sendMessageController,
-  endConversationController,
-  getConversationController,
-  getPatientConversationsController,
+    startConversationController,
+    sendMessageController,
+    endConversationController,
+    getConversationController,
+    getPatientConversationsController,
 } = require("./controllers");
 const { sendMessageValidator, endConversationValidator } = require("./dto");
 
@@ -16,44 +16,44 @@ const chatRouter = express.Router();
 
 // Start a new conversation
 chatRouter.post(
-  "/start",
-  validateLoggedInUserMiddleware,
-  validatePatientRole,
-  startConversationController,
+    "/start",
+    validateLoggedInUserMiddleware,
+    validatePatientRole,
+    startConversationController,
 );
 
 // Send message and get AI response
 chatRouter.post(
-  "/message",
-  validateLoggedInUserMiddleware,
-  validatePatientRole,
-  sendMessageValidator,
-  sendMessageController,
+    "/message",
+    validateLoggedInUserMiddleware,
+    validatePatientRole,
+    sendMessageValidator,
+    sendMessageController,
 );
 
 // End conversation and generate summary
 chatRouter.post(
-  "/end",
-  validateLoggedInUserMiddleware,
-  validatePatientRole,
-  endConversationValidator,
-  endConversationController,
+    "/end",
+    validateLoggedInUserMiddleware,
+    validatePatientRole,
+    endConversationValidator,
+    endConversationController,
 );
 
 // Get all patient conversations
 chatRouter.get(
-  "/",
-  validateLoggedInUserMiddleware,
-  validatePatientRole,
-  getPatientConversationsController,
+    "/",
+    validateLoggedInUserMiddleware,
+    validatePatientRole,
+    getPatientConversationsController,
 );
 
 // Get specific conversation history
 chatRouter.get(
-  "/:conversationId",
-  validateLoggedInUserMiddleware,
-  validatePatientRole,
-  getConversationController,
+    "/:conversationId",
+    validateLoggedInUserMiddleware,
+    validatePatientRole,
+    getConversationController,
 );
 
 module.exports = { chatRouter };

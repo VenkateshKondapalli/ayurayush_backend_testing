@@ -124,6 +124,8 @@ const _buildPreConsultNote = (summary) => {
 };
 
 const startConversation = async (userId) => {
+    console.log("-----🟢 inside startConversation-------");
+
     const conversationId = uuidv4();
 
     const chatHistory = await ChatHistoryModel.create({
@@ -141,6 +143,8 @@ const startConversation = async (userId) => {
 };
 
 const sendMessage = async (userId, { conversationId, message }) => {
+    console.log("-----🟢 inside sendMessage-------");
+
     const chatHistory = await ChatHistoryModel.findOne({
         conversationId,
         patientId: userId,
@@ -189,6 +193,7 @@ const sendMessage = async (userId, { conversationId, message }) => {
 };
 
 const endConversation = async (userId, conversationId) => {
+    console.log("-----🟢 inside endConversation-------");
     const chatHistory = await ChatHistoryModel.findOne({
         conversationId,
         patientId: userId,
@@ -255,6 +260,8 @@ const endConversation = async (userId, conversationId) => {
 };
 
 const getConversation = async (userId, conversationId) => {
+    console.log("-----🟢 inside getConversation-------");
+
     const chatHistory = await ChatHistoryModel.findOne({
         conversationId,
         patientId: userId,
@@ -276,6 +283,7 @@ const getConversation = async (userId, conversationId) => {
 };
 
 const getPatientConversations = async (userId, query = {}) => {
+    console.log("-----🟢 inside getPatientConversations-------");
     const { page, limit, skip } = parsePagination(query);
     const filter = { patientId: userId };
 

@@ -1,76 +1,76 @@
 const express = require("express");
 const {
-  validateLoggedInUserMiddleware,
-  validateDoctorRole,
+    validateLoggedInUserMiddleware,
+    validateDoctorRole,
 } = require("../middlewares");
 const {
-  doctorDashboardController,
-  getDoctorAppointmentsController,
-  getTodayAppointmentsController,
-  getAppointmentDetailController,
-  completeAppointmentController,
-  getDoctorProfileController,
-  updateDoctorProfileController,
+    doctorDashboardController,
+    getDoctorAppointmentsController,
+    getTodayAppointmentsController,
+    getAppointmentDetailController,
+    completeAppointmentController,
+    getDoctorProfileController,
+    updateDoctorProfileController,
 } = require("./controllers");
 
 const doctorsRouter = express.Router();
 
 // Dashboard
 doctorsRouter.get(
-  "/dashboard",
-  validateLoggedInUserMiddleware,
-  validateDoctorRole,
-  doctorDashboardController,
+    "/dashboard",
+    validateLoggedInUserMiddleware,
+    validateDoctorRole,
+    doctorDashboardController,
 );
 
 // Get all doctor appointments
 doctorsRouter.get(
-  "/appointments",
-  validateLoggedInUserMiddleware,
-  validateDoctorRole,
-  getDoctorAppointmentsController,
+    "/appointments",
+    validateLoggedInUserMiddleware,
+    validateDoctorRole,
+    getDoctorAppointmentsController,
 );
 
 // Get today's appointments
 doctorsRouter.get(
-  "/appointments/today",
-  validateLoggedInUserMiddleware,
-  validateDoctorRole,
-  getTodayAppointmentsController,
+    "/appointments/today",
+    validateLoggedInUserMiddleware,
+    validateDoctorRole,
+    getTodayAppointmentsController,
 );
 
 // Get specific appointment details
 doctorsRouter.get(
-  "/appointments/:appointmentId",
-  validateLoggedInUserMiddleware,
-  validateDoctorRole,
-  getAppointmentDetailController,
+    "/appointments/:appointmentId",
+    validateLoggedInUserMiddleware,
+    validateDoctorRole,
+    getAppointmentDetailController,
 );
 
 // Complete appointment
 doctorsRouter.post(
-  "/appointments/:appointmentId/complete",
-  validateLoggedInUserMiddleware,
-  validateDoctorRole,
-  completeAppointmentController,
+    "/appointments/:appointmentId/complete",
+    validateLoggedInUserMiddleware,
+    validateDoctorRole,
+    completeAppointmentController,
 );
 
 // Get doctor profile
 doctorsRouter.get(
-  "/profile",
-  validateLoggedInUserMiddleware,
-  validateDoctorRole,
-  getDoctorProfileController,
+    "/profile",
+    validateLoggedInUserMiddleware,
+    validateDoctorRole,
+    getDoctorProfileController,
 );
 
 // Update doctor profile
 doctorsRouter.put(
-  "/profile",
-  validateLoggedInUserMiddleware,
-  validateDoctorRole,
-  updateDoctorProfileController,
+    "/profile",
+    validateLoggedInUserMiddleware,
+    validateDoctorRole,
+    updateDoctorProfileController,
 );
 
 module.exports = {
-  doctorsRouter,
+    doctorsRouter,
 };

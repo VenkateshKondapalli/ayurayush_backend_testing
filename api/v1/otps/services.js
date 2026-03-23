@@ -7,6 +7,7 @@ const nanoid = customAlphabet("123456789", 6);
 const OTP_COOLDOWN_SECONDS = 60;
 
 const sendOtp = async (email) => {
+    console.log("-----🟢 inside sendOtp-------");
     // Check cooldown
     const recentOtp = await OtpModel.findOne({ email })
         .sort("-createdAt")

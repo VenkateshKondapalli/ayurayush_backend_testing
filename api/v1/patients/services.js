@@ -1,5 +1,4 @@
 const { AppointmentModel } = require("../../../models/appointmentSchema");
-const { ChatHistoryModel } = require("../../../models/chatHistorySchema");
 const {
     DoctorApplicationsModel,
 } = require("../../../models/doctorApplicationSchema");
@@ -23,8 +22,10 @@ const {
     notifyAppointmentBooked,
     notifyAppointmentCancelled,
 } = require("../../../utils/appointmentNotifications");
+const { ChatHistoryModel } = require("../../../models/chatHistorySchema");
 
 const getPatientDashboard = async (userId) => {
+    console.log("-----🟢 inside getPatientDashboard-------");
     let patient = await PatientModel.findOne({ userId });
 
     if (!patient) {
@@ -53,6 +54,7 @@ const applyForDoctorRole = async (
     userId,
     { qualification, specialization, experience, licenseNumber },
 ) => {
+    console.log("-----🟢 inside applyForDoctorRole-------");
     const existingApplication = await DoctorApplicationsModel.findOne({
         userId,
     });
@@ -80,6 +82,7 @@ const applyForDoctorRole = async (
 };
 
 const getAvailableSlots = async (doctorId, date) => {
+    console.log("-----🟢 inside getAvailableSlots-------");
     const doctor = await DoctorModel.findOne({
         userId: doctorId,
         isVerified: true,
@@ -119,18 +122,11 @@ const bookAppointment = async (
         languagePreference = "english",
     },
 ) => {
+    console.log("-----🟢 inside bookAppointment-------");
     const chatHistory = await ChatHistoryModel.findOne({
         conversationId,
         patientId: userId,
     });
-
-    if (!chatHistory) {
-        const error = new Error(
-            "Conversation not found. Please complete chatbot first.",
-        );
-        error.statusCode = 404;
-        throw error;
-    }
 
     if (!chatHistory.summary || !chatHistory.summary.symptoms) {
         const error = new Error(
@@ -329,41 +325,6 @@ const bookAppointment = async (
     };
 };
 
-// Returns treatment suggestions based on a completed conversation
-const getTreatmentSuggestionsForPatient = async (conversationId, userId) => {
-    const chatHistory = await ChatHistoryModel.findOne({
-        conversationId,
-        patientId: userId,
-    });
-
-    if (!chatHistory) {
-        const error = new Error("Conversation not found");
-        error.statusCode = 404;
-        throw error;
-    }
-
-    if (
-        chatHistory.status !== "completed" &&
-        chatHistory.status !== "emergency"
-    ) {
-        const error = new Error(
-            "Conversation not yet completed. Please end the chat first.",
-        );
-        error.statusCode = 400;
-        throw error;
-    }
-
-    return {
-        conversationId,
-        suggestedCarePath: chatHistory.summary?.suggestedCarePath || "normal",
-        urgencyLevel: chatHistory.summary?.urgencyLevel || "normal",
-        recommendedTreatmentCodes:
-            chatHistory.summary?.recommendedTreatmentCodes || [],
-        prakritiType: chatHistory.summary?.prakritiType || null,
-        preConsultNote: chatHistory.summary?.preConsultNote || null,
-    };
-};
-
 const getPatientAppointments = async (userId, status, query = {}) => {
     const { page, limit, skip } = parsePagination(query);
     const filter = { patientId: userId };
@@ -424,6 +385,7 @@ const getPatientAppointments = async (userId, status, query = {}) => {
 };
 
 const getAppointmentDetails = async (userId, appointmentId) => {
+    console.log("-----🟢 inside getAppointmentDetails-------");
     const appointment = await AppointmentModel.findOne({
         _id: appointmentId,
         patientId: userId,
@@ -510,6 +472,8 @@ const cancelAppointment = async (userId, appointmentId) => {
 };
 
 const getVerifiedDoctors = async (specialization, query = {}) => {
+    console.log("-----🟢 inside getVerifiedDoctors-------");
+
     const { page, limit, skip } = parsePagination(query);
     const doctorQuery = { isVerified: true };
     if (specialization) {
@@ -561,6 +525,8 @@ const getVerifiedDoctors = async (specialization, query = {}) => {
 };
 
 const getPatientProfile = async (userId) => {
+    console.log("-----🟢 inside getPatientProfile-------");
+
     const [user, patient] = await Promise.all([
         UserModel.findById(userId).select(
             "name email phone gender dob addresses profilePhoto",
@@ -595,6 +561,7 @@ const getPatientProfile = async (userId) => {
 };
 
 const updatePatientProfile = async (userId, updates) => {
+    console.log("-----🟢 inside updatePatientProfile-------");
     const {
         name,
         phone,
