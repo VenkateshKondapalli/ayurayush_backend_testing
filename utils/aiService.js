@@ -164,28 +164,9 @@ const generateConversationSummary = async (messages) => {
             },
         ],
     });
-    const result = await model.generateContent({
-        contents: [
-            {
-                role: "user",
-                parts: [
-                    {
-                        text: `${SYSTEM_PROMPTS.summary}\n\nConversation:\n${conversationText}`,
-                    },
-                ],
-            },
-        ],
-    });
 
     const responseText = result.response.text().trim();
-    const responseText = result.response.text().trim();
 
-    // Extract JSON from the response (handle markdown code blocks)
-    let jsonString = responseText;
-    const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (jsonMatch) {
-        jsonString = jsonMatch[1].trim();
-    }
     // Extract JSON from the response (handle markdown code blocks)
     let jsonString = responseText;
     const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
