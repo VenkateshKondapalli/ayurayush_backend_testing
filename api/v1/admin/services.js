@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { customAlphabet } = require("nanoid");
 const { AppointmentModel } = require("../../../models/appointmentSchema");
 const { ChatHistoryModel } = require("../../../models/chatHistorySchema");
 const {
@@ -18,10 +19,15 @@ const {
 const {
     notifyAppointmentApproved,
     notifyAppointmentRejected,
+    notifyDoctorOnboarded,
 } = require("../../../utils/appointmentNotifications");
 
+const generateTemporaryPassword = customAlphabet(
+    "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789",
+    12,
+);
+
 const getDashboardStats = async () => {
-    console.log("-----🟢 inside getDashboardStats-------");
     const [totalUsers, totalDoctors, totalPatients] = await Promise.all([
         UserModel.countDocuments(),
         UserModel.countDocuments({ roles: "doctor" }),
@@ -30,8 +36,104 @@ const getDashboardStats = async () => {
     return { totalUsers, totalDoctors, totalPatients };
 };
 
+const createDoctorAccountByAdmin = async (adminUserId, payload) => {
+    const {
+        name,
+        email,
+        phone,
+        gender,
+        dob,
+        qualification,
+        specialization,
+        experience,
+        licenseNumber,
+        consultationFee,
+        availableModes,
+    } = payload;
+
+    const existingUser = await UserModel.findOne({
+        $or: [{ email }, { phone }],
+    }).select("_id email phone");
+
+    if (existingUser) {
+        const err = new Error(
+            existingUser.email === email
+                ? "Email already exists"
+                : "Phone already exists",
+        );
+        err.statusCode = 409;
+        throw err;
+    }
+
+    const temporaryPassword = generateTemporaryPassword();
+
+    const session = await mongoose.startSession();
+    let createdUser;
+    let createdDoctor;
+
+    try {
+        await session.withTransaction(async () => {
+            const users = await UserModel.create(
+                [
+                    {
+                        name,
+                        email,
+                        phone,
+                        gender,
+                        dob,
+                        password: temporaryPassword,
+                        roles: [ROLE_OPTIONS.DOCTOR],
+                        mustChangePassword: true,
+                    },
+                ],
+                { session },
+            );
+            createdUser = users[0];
+
+            const doctors = await DoctorModel.create(
+                [
+                    {
+                        userId: createdUser._id,
+                        qualification,
+                        specialization,
+                        experience,
+                        licenseNumber,
+                        consultationFee,
+                        availableModes: availableModes || [],
+                        isVerified: true,
+                        verifiedAt: new Date(),
+                    },
+                ],
+                { session },
+            );
+            createdDoctor = doctors[0];
+        });
+    } finally {
+        await session.endSession();
+    }
+
+    const loginUrl = `${process.env.FRONTEND_URL_LOCAL || "http://localhost:5173"}/login`;
+
+    notifyDoctorOnboarded(email, {
+        doctorName: name,
+        temporaryPassword,
+        loginUrl,
+    });
+
+    return {
+        userId: createdUser._id,
+        doctorId: createdDoctor._id,
+        email: createdUser.email,
+        name: createdUser.name,
+        specialization: createdDoctor.specialization,
+        qualification: createdDoctor.qualification,
+        isVerified: createdDoctor.isVerified,
+        mustChangePassword: createdUser.mustChangePassword,
+        createdByAdmin: adminUserId,
+    };
+};
+
 const getPendingDoctorApplications = async () => {
-    console.log("-----🟢 inside getPendingDoctorApplications-------");
     return DoctorApplicationsModel.find({ status: "pending" }).populate(
         "userId",
         "email",
@@ -39,7 +141,6 @@ const getPendingDoctorApplications = async () => {
 };
 
 const approveDoctorApplication = async (applicationId, adminUserId) => {
-    console.log("-----🟢 inside approveDoctorApplication-------");
     const application = await DoctorApplicationsModel.findById(applicationId);
 
     if (!application) {
@@ -90,7 +191,6 @@ const approveDoctorApplication = async (applicationId, adminUserId) => {
 };
 
 const rejectDoctorApplication = async (applicationId, adminUserId) => {
-    console.log("-----🟢 inside rejectDoctorApplication-------");
     const application = await DoctorApplicationsModel.findById(applicationId);
 
     if (!application) {
@@ -106,7 +206,6 @@ const rejectDoctorApplication = async (applicationId, adminUserId) => {
 };
 
 const getPendingNormalAppointments = async (query = {}) => {
-    console.log("-----🟢 inside getPendingNormalAppointments-------");
     const { page, limit, skip } = parsePagination(query);
     const filter = {
         status: "pending_admin_approval",
@@ -172,7 +271,6 @@ const getPendingNormalAppointments = async (query = {}) => {
 };
 
 const getEmergencyAppointments = async (query = {}) => {
-    console.log("-----🟢 inside getEmergencyAppointments-------");
     const { page, limit, skip } = parsePagination(query);
     const filter = {
         status: "pending_admin_approval",
@@ -257,7 +355,6 @@ const approveAppointment = async (
     edits,
     adminNotes,
 ) => {
-    console.log("-----🟢 inside approveAppointment-------");
     const appointment = await AppointmentModel.findById(appointmentId);
 
     if (!appointment) {
@@ -338,7 +435,6 @@ const approveAppointment = async (
 };
 
 const rejectAppointment = async (appointmentId, adminUserId, reason) => {
-    console.log("-----🟢 inside rejectAppointment-------");
     const appointment = await AppointmentModel.findById(appointmentId);
 
     if (!appointment) {
@@ -380,7 +476,6 @@ const setDoctorAvailability = async (
     adminUserId,
     { availableDays, timeSlots, unavailableDates },
 ) => {
-    console.log("-----🟢 inside setDoctorAvailability-------");
     const doctor = await DoctorModel.findOne({
         userId: doctorId,
         isVerified: true,
@@ -420,8 +515,94 @@ const setDoctorAvailability = async (
     };
 };
 
+const getVerifiedDoctorsForAdmin = async (query = {}) => {
+    const { page, limit, skip } = parsePagination(query);
+    const doctorQuery = { isVerified: true };
+
+    if (query.specialization) {
+        const escaped = query.specialization.replace(
+            /[.*+?^${}()|[\]\\]/g,
+            "\\$&",
+        );
+        doctorQuery.specialization = {
+            $regex: new RegExp(`^${escaped}$`, "i"),
+        };
+    }
+
+    const [doctors, totalCount] = await Promise.all([
+        DoctorModel.find(doctorQuery).skip(skip).limit(limit),
+        DoctorModel.countDocuments(doctorQuery),
+    ]);
+
+    const doctorUserIds = doctors.map((d) => d.userId);
+    const users = await UserModel.find({
+        _id: { $in: doctorUserIds },
+        isActive: true,
+    }).select("name email phone gender profilePhoto");
+
+    const doctorList = doctors
+        .map((doc) => {
+            const user = users.find(
+                (u) => u._id.toString() === doc.userId.toString(),
+            );
+            if (!user) return null;
+
+            return {
+                doctorId: doc.userId,
+                name: user.name,
+                email: user.email,
+                phone: user.phone,
+                gender: user.gender,
+                profilePhoto: user.profilePhoto,
+                specialization: doc.specialization,
+                qualification: doc.qualification,
+                experience: doc.experience,
+                consultationFee: doc.consultationFee,
+            };
+        })
+        .filter(Boolean);
+
+    return {
+        count: doctorList.length,
+        totalCount,
+        page,
+        totalPages: Math.ceil(totalCount / limit),
+        doctors: doctorList,
+    };
+};
+
+const getDoctorAvailableSlotsForAdmin = async (doctorId, date) => {
+    if (!date) {
+        const err = new Error("date query parameter is required");
+        err.statusCode = 400;
+        throw err;
+    }
+
+    const doctor = await DoctorModel.findOne({
+        userId: doctorId,
+        isVerified: true,
+    });
+    if (!doctor) {
+        const err = new Error("Doctor not found or not verified");
+        err.statusCode = 404;
+        throw err;
+    }
+
+    const availableSlots = await DoctorAvailabiltyModel.getBookableSlots(
+        doctorId,
+        date,
+        AppointmentModel,
+    );
+
+    return {
+        doctorId,
+        date,
+        availableSlots,
+        totalSlots: availableSlots.length,
+    };
+};
+
 const offlineBookAppointment = async (adminId, bookingData) => {
-    console.log("-----🟢 inside offlineBookAppointment-------");
     const {
         patientEmail,
         doctorId,
@@ -505,6 +686,7 @@ const offlineBookAppointment = async (adminId, bookingData) => {
 
 module.exports = {
     getDashboardStats,
+    createDoctorAccountByAdmin,
     getPendingDoctorApplications,
     approveDoctorApplication,
     rejectDoctorApplication,
@@ -514,4 +696,6 @@ module.exports = {
     rejectAppointment,
     setDoctorAvailability,
     offlineBookAppointment,
+    getVerifiedDoctorsForAdmin,
+    getDoctorAvailableSlotsForAdmin,
 };

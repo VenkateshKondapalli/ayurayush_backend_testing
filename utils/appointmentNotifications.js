@@ -139,10 +139,32 @@ const notifyAppointmentCancelled = (
     );
 };
 
+const notifyDoctorOnboarded = (
+    doctorEmail,
+    { doctorName, temporaryPassword, loginUrl },
+) => {
+    const body = `
+    <p>Your doctor account has been created and verified by the hospital admin.</p>
+    <div class="detail">
+      <p><strong>Name:</strong> ${doctorName}</p>
+      <p><strong>Email:</strong> ${doctorEmail}</p>
+      <p><strong>Temporary Password:</strong> ${temporaryPassword}</p>
+      <p><strong>Login URL:</strong> <a href="${loginUrl}" target="_blank" rel="noopener noreferrer">${loginUrl}</a></p>
+    </div>
+    <p>Please login and change your password immediately.</p>`;
+    sendNotification(
+        doctorEmail,
+        "Doctor Account Onboarding - AyurAyush",
+        "Doctor Account Ready",
+        body,
+    );
+};
+
 module.exports = {
     notifyAppointmentBooked,
     notifyAppointmentApproved,
     notifyAppointmentRejected,
     notifyAppointmentCompleted,
     notifyAppointmentCancelled,
+    notifyDoctorOnboarded,
 };

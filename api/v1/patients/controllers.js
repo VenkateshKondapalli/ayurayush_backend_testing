@@ -10,6 +10,19 @@ const {
     getPatientProfile,
     updatePatientProfile,
 } = require("./services");
+const {
+    getPatientDashboard,
+    applyForDoctorRole,
+    getAvailableSlots,
+    bookAppointment,
+    getPatientAppointments,
+    getAppointmentDetails,
+    cancelAppointment,
+    getVerifiedDoctors,
+    getPatientProfile,
+    updatePatientProfile,
+    getTreatmentSuggestionsForPatient,
+} = require("./services");
 
 const patientDashboardController = async (req, res, next) => {
     try {

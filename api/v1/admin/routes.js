@@ -5,9 +5,12 @@ const {
 } = require("../middlewares");
 const {
     adminDashboardController,
+    createDoctorAccountController,
     reviewDoctorApplicationsController,
     approveDoctorApplicationController,
     rejectDoctorApplicationController,
+    getVerifiedDoctorsController,
+    getDoctorAvailableSlotsController,
     getPendingNormalAppointmentsController,
     getEmergencyAppointmentsController,
     approveAppointmentController,
@@ -15,7 +18,11 @@ const {
     setDoctorAvailabilityController,
     offlineBookAppointmentController,
 } = require("./controllers");
-const { rejectAppointmentValidator, offlineBookValidator } = require("./dto");
+const {
+    rejectAppointmentValidator,
+    offlineBookValidator,
+    createDoctorAccountValidator,
+} = require("./dto");
 
 const adminsRouter = express.Router();
 
@@ -26,11 +33,33 @@ adminsRouter.get(
     adminDashboardController,
 );
 
+adminsRouter.post(
+    "/doctors/create",
+    validateLoggedInUserMiddleware,
+    validateIsAdminMiddleware,
+    createDoctorAccountValidator,
+    createDoctorAccountController,
+);
+
 adminsRouter.get(
     "/doctor-applications",
     validateLoggedInUserMiddleware,
     validateIsAdminMiddleware,
     reviewDoctorApplicationsController,
+);
+
+adminsRouter.get(
+    "/doctors",
+    validateLoggedInUserMiddleware,
+    validateIsAdminMiddleware,
+    getVerifiedDoctorsController,
+);
+
+adminsRouter.get(
+    "/doctors/:doctorId/available-slots",
+    validateLoggedInUserMiddleware,
+    validateIsAdminMiddleware,
+    getDoctorAvailableSlotsController,
 );
 
 adminsRouter.post(

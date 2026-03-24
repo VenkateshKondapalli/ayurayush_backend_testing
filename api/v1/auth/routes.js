@@ -7,6 +7,7 @@ const {
     checkEmailExistsController,
     forgotPasswordController,
     resetPasswordController,
+    changePasswordController,
 } = require("./controllers");
 
 const {
@@ -14,6 +15,7 @@ const {
     userLoginValidator,
     forgotPasswordValidator,
     resetPasswordValidator,
+    changePasswordValidator,
 } = require("./dto");
 const { validateOtpMiddleware } = require("../otps/middlewares");
 const { validateLoggedInUserMiddleware } = require("../middlewares");
@@ -40,6 +42,12 @@ authRouter.post(
     resetPasswordValidator,
     validateOtpMiddleware,
     resetPasswordController,
+);
+authRouter.post(
+    "/change-password",
+    validateLoggedInUserMiddleware,
+    changePasswordValidator,
+    changePasswordController,
 );
 
 module.exports = { authRouter };

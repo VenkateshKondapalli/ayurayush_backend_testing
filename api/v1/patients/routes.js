@@ -106,7 +106,6 @@ patientsRouter.put(
     updatePatientProfileController,
 );
 
-module.exports = { patientsRouter };
 // Get treatment suggestions from a completed conversation
 patientsRouter.get(
     "/treatment-suggestions",

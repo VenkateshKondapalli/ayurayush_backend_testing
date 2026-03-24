@@ -39,4 +39,49 @@ const offlineBookValidator = (req, res, next) => {
     }
 };
 
-module.exports = { rejectAppointmentValidator, offlineBookValidator };
+const createDoctorAccountValidator = (req, res, next) => {
+    try {
+        const {
+            name,
+            email,
+            phone,
+            gender,
+            dob,
+            qualification,
+            specialization,
+            experience,
+            licenseNumber,
+        } = req.body;
+
+        if (
+            !name ||
+            !email ||
+            !phone ||
+            !gender ||
+            !dob ||
+            !qualification ||
+            !specialization ||
+            experience === undefined ||
+            !licenseNumber
+        ) {
+            return res.status(400).json({
+                isSuccess: false,
+                message:
+                    "name, email, phone, gender, dob, qualification, specialization, experience, and licenseNumber are required",
+            });
+        }
+
+        next();
+    } catch (err) {
+        res.status(500).json({
+            isSuccess: false,
+            message: "Internal Server Error",
+        });
+    }
+};
+
+module.exports = {
+    rejectAppointmentValidator,
+    offlineBookValidator,
+    createDoctorAccountValidator,
+};
