@@ -4,12 +4,12 @@ const { DoctorModel } = require("../../../models/doctorSchema");
 const { PatientModel } = require("../../../models/patientSchema");
 const { UserModel } = require("../../../models/userSchema");
 const { calculateAge, parsePagination } = require("../../../utils/helpers");
+const logger = require("../../../utils/logger");
 const {
     notifyAppointmentCompleted,
 } = require("../../../utils/appointmentNotifications");
 
 const getDoctorDashboard = async (userId) => {
-    console.log("-----🟢 inside getDoctorDashboard-------");
     let doctor = await DoctorModel.findOne({ userId });
 
     if (!doctor) {
@@ -35,7 +35,6 @@ const getDoctorAppointments = async (
     userId,
     { status, date, page: rawPage, limit: rawLimit },
 ) => {
-    console.log("-----🟢 inside getDoctorAppointments-------");
     const { page, limit, skip } = parsePagination({
         page: rawPage,
         limit: rawLimit,
@@ -119,8 +118,6 @@ const getDoctorAppointments = async (
 };
 
 const getTodayAppointments = async (userId) => {
-    console.log("-----🟢 inside getTodayAppointments-------");
-
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
@@ -174,8 +171,6 @@ const getTodayAppointments = async (userId) => {
 };
 
 const getAppointmentDetail = async (userId, appointmentId) => {
-    console.log("-----🟢 inside getAppointmentDetail-------");
-
     const appointment = await AppointmentModel.findOne({
         _id: appointmentId,
         doctorId: userId,
@@ -233,8 +228,6 @@ const completeAppointment = async (
     appointmentId,
     { doctorNotes, prescription },
 ) => {
-    console.log("-----🟢 inside completeAppointment-------");
-
     const appointment = await AppointmentModel.findOne({
         _id: appointmentId,
         doctorId: userId,
@@ -274,8 +267,6 @@ const completeAppointment = async (
 };
 
 const getDoctorProfile = async (userId) => {
-    console.log("-----🟢 inside getDoctorProfile-------");
-
     const [user, doctor] = await Promise.all([
         UserModel.findById(userId).select(
             "name email phone gender dob addresses profilePhoto",
@@ -312,7 +303,6 @@ const getDoctorProfile = async (userId) => {
 };
 
 const updateDoctorProfile = async (userId, updates) => {
-    console.log("-----🟢 inside updateDoctorProfile-------");
     const {
         name,
         phone,

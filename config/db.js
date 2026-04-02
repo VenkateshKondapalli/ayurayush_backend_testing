@@ -1,15 +1,14 @@
 const mongoose = require("mongoose");
+const logger = require("../utils/logger");
 
 mongoose
     .connect(process.env.MONGO_DB_URL, {
         dbName: "ayurayush",
     })
     .then(() => {
-        console.log("--------🟢 DB CONNECTED---------");
+        logger.info("DB connected");
     })
     .catch((err) => {
-        console.log("\n-------🔴 DB Connection Error------\n");
-        console.log(err.message);
-        console.log("--------------------------------");
+        logger.error("DB connection error", { error: err.message });
         process.exit(1);
     });

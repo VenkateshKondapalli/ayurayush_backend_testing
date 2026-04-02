@@ -1,6 +1,23 @@
 const dotenv = require("dotenv");
 dotenv.config();
 
+const required = [
+    "MONGO_DB_URL",
+    "JWT_SECRET",
+    "GEMINI_AI_API_KEY",
+    "RESEND_MAILER_API_KEY",
+];
+
+required.forEach((key) => {
+    if (!process.env[key]) {
+        console.error(`Missing required env var: ${key}`);
+        process.exit(1);
+    }
+});
+
+const logger = require("./utils/logger");
+const { csrfOriginCheckMiddleware } = require("./utils/csrfProtection");
+
 const { apiRouter } = require("./api/v1/routes");
 const { errorHandler } = require("./api/v1/errorHandler");
 
@@ -71,11 +88,11 @@ app.get("/", (req, res) => {
 app.use("/api/v1/auth", authLimiter);
 app.use("/api/v1/otps", authLimiter);
 
-app.use("/api/v1", apiRouter);
+app.use("/api/v1", csrfOriginCheckMiddleware, apiRouter);
 
 // Centralized error handler — must be after all routes
 app.use(errorHandler);
 
 app.listen(process.env.PORT, () => {
-    console.log("-------- Server started --------");
+    logger.info("Server started", { port: process.env.PORT });
 });

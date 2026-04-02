@@ -9,11 +9,12 @@ const {
     getVerifiedDoctors,
     getPatientProfile,
     updatePatientProfile,
+    getTreatmentSuggestionsForPatient,
 } = require("./services");
 
 const patientDashboardController = async (req, res, next) => {
     try {
-        const data = await getPatientDashboard(req.currentUser.userId);
+        const data = await getPatientDashboard(req.currentPatient.userId);
         res.status(200).json({
             isSuccess: true,
             message: "Patient dashboard loaded successfully",
@@ -26,14 +27,10 @@ const patientDashboardController = async (req, res, next) => {
 
 const applyForDoctorRoleController = async (req, res, next) => {
     try {
-        const data = await applyForDoctorRole(
-            req.currentPatient.userId,
-            req.body,
-        );
-        res.status(201).json({
-            isSuccess: true,
-            message: "Doctor role application submitted successfully",
-            data,
+        res.status(410).json({
+            isSuccess: false,
+            message:
+                "This flow is disabled for MVP. Doctor onboarding is now managed by admin after offline verification.",
         });
     } catch (err) {
         next(err);
@@ -184,16 +181,6 @@ const getTreatmentSuggestionsController = async (req, res, next) => {
 };
 
 module.exports = {
-    patientDashboardController,
-    applyForDoctorRoleController,
-    getAvailableSlotsController,
-    bookAppointmentController,
-    getPatientAppointmentsController,
-    getAppointmentDetailsController,
-    cancelAppointmentController,
-    getVerifiedDoctorsController,
-    getPatientProfileController,
-    updatePatientProfileController,
     patientDashboardController,
     applyForDoctorRoleController,
     getAvailableSlotsController,

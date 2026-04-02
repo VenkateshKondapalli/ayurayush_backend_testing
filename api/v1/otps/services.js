@@ -1,13 +1,13 @@
 const { customAlphabet } = require("nanoid");
 const { OtpModel, OTP_EXPIRY_MINUTES } = require("../../../models/otpSchema");
 const { sendOtpEmail } = require("../../../utils/emailHelper");
+const logger = require("../../../utils/logger");
 
 const nanoid = customAlphabet("123456789", 6);
 
 const OTP_COOLDOWN_SECONDS = 60;
 
 const sendOtp = async (email) => {
-    console.log("-----🟢 inside sendOtp-------");
     // Check cooldown
     const recentOtp = await OtpModel.findOne({ email })
         .sort("-createdAt")
@@ -25,6 +25,7 @@ const sendOtp = async (email) => {
                 `OTP was already sent! Please wait ${waitSeconds}s before requesting again.`,
             );
             err.statusCode = 429;
+            logger.warn("OTP resend blocked by cooldown", { waitSeconds });
             throw err;
         }
     }

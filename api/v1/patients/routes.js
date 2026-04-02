@@ -5,7 +5,6 @@ const {
 } = require("../middlewares");
 const {
     patientDashboardController,
-    applyForDoctorRoleController,
     getAvailableSlotsController,
     bookAppointmentController,
     cancelAppointmentController,
@@ -19,7 +18,7 @@ const {
 const {
     bookAppointmentValidator,
     getAvailableSlotsValidator,
-    applyDoctorRoleValidator,
+    updatePatientProfileValidator,
 } = require("./dto");
 
 const patientsRouter = express.Router();
@@ -29,15 +28,6 @@ patientsRouter.get(
     validateLoggedInUserMiddleware,
     validatePatientRole,
     patientDashboardController,
-);
-
-// Apply for doctor role
-patientsRouter.post(
-    "/apply-doctor-role",
-    validateLoggedInUserMiddleware,
-    validatePatientRole,
-    applyDoctorRoleValidator,
-    applyForDoctorRoleController,
 );
 
 // Get available time slots for a doctor
@@ -103,10 +93,10 @@ patientsRouter.put(
     "/profile",
     validateLoggedInUserMiddleware,
     validatePatientRole,
+    updatePatientProfileValidator,
     updatePatientProfileController,
 );
 
-module.exports = { patientsRouter };
 // Get treatment suggestions from a completed conversation
 patientsRouter.get(
     "/treatment-suggestions",

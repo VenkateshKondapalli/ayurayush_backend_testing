@@ -12,6 +12,7 @@ dotenv.config();
 
 const mongoose = require("mongoose");
 const { TreatmentModel } = require("../../../models/treatmentSchema");
+const logger = require("../../../utils/logger");
 
 const TREATMENTS = [
     // ── Normal ──────────────────────────────────────────────────────────────────
@@ -241,7 +242,7 @@ const TREATMENTS = [
 const seed = async () => {
     try {
         await mongoose.connect(process.env.MONGO_DB_URL);
-        console.log("Connected to MongoDB");
+        logger.info("Connected to MongoDB for treatment seed");
 
         let created = 0;
         let updated = 0;
@@ -259,11 +260,11 @@ const seed = async () => {
             }
         }
 
-        console.log(
+        logger.info(
             `Seed complete — ${created} created, ${updated} updated, ${TREATMENTS.length} total.`,
         );
     } catch (err) {
-        console.error("Seed failed:", err.message);
+        logger.error("Treatment seed failed", { error: err.message });
         process.exit(1);
     } finally {
         await mongoose.disconnect();

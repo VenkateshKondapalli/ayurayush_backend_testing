@@ -1,3 +1,5 @@
+const logger = require("../../utils/logger");
+
 const errorHandler = (err, req, res, next) => {
     // MongoDB duplicate key error
     if (err.code === 11000) {
@@ -23,7 +25,12 @@ const errorHandler = (err, req, res, next) => {
     }
 
     // Fallback: unexpected errors
-    console.error("Unhandled error:", err);
+    logger.error("Unhandled error", {
+        message: err.message,
+        stack: err.stack,
+        path: req.originalUrl,
+        method: req.method,
+    });
     res.status(500).json({
         isSuccess: false,
         message: "Internal Server Error",

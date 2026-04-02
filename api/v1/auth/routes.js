@@ -7,6 +7,7 @@ const {
     checkEmailExistsController,
     forgotPasswordController,
     resetPasswordController,
+    changePasswordController,
 } = require("./controllers");
 
 const {
@@ -14,11 +15,33 @@ const {
     userLoginValidator,
     forgotPasswordValidator,
     resetPasswordValidator,
+    changePasswordValidator,
 } = require("./dto");
 const { validateOtpMiddleware } = require("../otps/middlewares");
 const { validateLoggedInUserMiddleware } = require("../middlewares");
 
 const authRouter = express.Router();
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const checkEmailQueryValidator = (req, res, next) => {
+    const { email } = req.query;
+
+    if (!email) {
+        return res.status(400).json({
+            isSuccess: false,
+            message: "Email query parameter is required",
+        });
+    }
+
+    if (!EMAIL_REGEX.test(email)) {
+        return res.status(400).json({
+            isSuccess: false,
+            message: "Invalid email format",
+        });
+    }
+
+    return next();
+};
 
 authRouter.post(
     "/signup",
@@ -29,7 +52,11 @@ authRouter.post(
 authRouter.post("/login", userLoginValidator, userLoginController);
 authRouter.get("/me", validateLoggedInUserMiddleware, getCurrentUserController);
 authRouter.get("/logout", userLogoutController);
-authRouter.get("/check-email", checkEmailExistsController);
+authRouter.get(
+    "/check-email",
+    checkEmailQueryValidator,
+    checkEmailExistsController,
+);
 authRouter.post(
     "/forgot-password",
     forgotPasswordValidator,
@@ -40,6 +67,12 @@ authRouter.post(
     resetPasswordValidator,
     validateOtpMiddleware,
     resetPasswordController,
+);
+authRouter.post(
+    "/change-password",
+    validateLoggedInUserMiddleware,
+    changePasswordValidator,
+    changePasswordController,
 );
 
 module.exports = { authRouter };

@@ -42,6 +42,40 @@ const appointmentSchema = new Schema(
             enum: ["normal", "emergency"],
             default: "normal",
         },
+        queueType: {
+            type: String,
+            enum: ["normal", "ayurveda", "panchakarma"],
+            default: "normal",
+        },
+        tokenNumber: {
+            type: String,
+            default: null,
+        },
+        queueDate: {
+            type: String,
+            default: null,
+        },
+        tokenSequence: {
+            type: Number,
+            default: null,
+        },
+        treatmentCode: {
+            type: String,
+            default: null,
+        },
+        therapistId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            default: null,
+        },
+        roomId: {
+            type: String,
+            default: null,
+        },
+        languagePreference: {
+            type: String,
+            default: null,
+        },
         chatConversationId: {
             type: String,
             ref: "chatHistory",

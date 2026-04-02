@@ -1,11 +1,10 @@
 const { Resend } = require("resend");
+const logger = require("./logger");
 
 const resend = new Resend(process.env.RESEND_MAILER_API_KEY);
 
 const sendEmail = async (toEmail, subject, htmlText) => {
     try {
-        console.log("--------🟢 inside sendEmail in emailHelper -------");
-
         const { data, error } = await resend.emails.send({
             from: process.env.SENDER_EMAIL,
             to: toEmail,
@@ -17,21 +16,22 @@ const sendEmail = async (toEmail, subject, htmlText) => {
             throw new Error(error.message);
         }
 
-        console.log("🟡 : resp:", data);
-        console.log("----------- ✅ Message sent -----------------", data);
+        logger.debug("Email sent", {
+            providerMessageId: data?.id,
+            subject,
+        });
     } catch (err) {
-        console.log(
-            "---------🔴 Error while sending mail in sendEmail----------",
-        );
-
-        console.log(err.message);
+        logger.error("Error while sending email", {
+            error: err.message,
+            subject,
+        });
 
         throw new Error("Email not sent");
     }
 };
 
 const sendOtpEmail = async (toEmail, otp) => {
-    console.log("... Sending OTP Email to ", toEmail);
+    logger.info("Sending OTP email");
     await sendEmail(
         toEmail,
         "OTP Verification for AyurAyush HealthCare App",

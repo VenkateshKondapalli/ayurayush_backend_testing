@@ -1,14 +1,16 @@
 const jwt = require("jsonwebtoken");
 const { ROLE_OPTIONS } = require("../../models/userSchema");
+const logger = require("../../utils/logger");
 
 const validateLoggedInUserMiddleware = (req, res, next) => {
     try {
-        console.log("-----🟢 inside validateLoggedInUserMiddleware-------");
-
         const { authorization } = req.cookies;
 
         if (!authorization) {
-            console.log("🟠 Token not present !!!");
+            logger.warn("Authorization token not present", {
+                path: req.originalUrl,
+                method: req.method,
+            });
             res.status(401).json({
                 isSuccess: false,
                 message: "User not logged in!",
@@ -16,22 +18,35 @@ const validateLoggedInUserMiddleware = (req, res, next) => {
             return;
         }
 
-        jwt.verify(authorization, process.env.JWT_SECRET, (err, data) => {
-            if (err) {
-                console.log("🔴 Invalid token... may be hacking attempt!");
+        jwt.verify(
+            authorization,
+            process.env.JWT_SECRET,
+            { algorithms: ["HS256"] },
+            (err, data) => {
+                if (err) {
+                    logger.warn("Invalid token", {
+                        path: req.originalUrl,
+                        method: req.method,
+                    });
 
-                return res.status(401).json({
-                    isSuccess: false,
-                    message: "User not logged in!",
+                    return res.status(401).json({
+                        isSuccess: false,
+                        message: "User not logged in!",
+                    });
+                }
+
+                logger.debug("Validated logged in user", {
+                    userId: data?.userId,
+                    roles: data?.roles,
                 });
-            }
-
-            console.log("✅ Valid user", data);
-            req.currentUser = data;
-            return next();
-        });
+                req.currentUser = data;
+                return next();
+            },
+        );
     } catch (err) {
-        console.log("-----🔴 Error in validateLoggedInUserMiddleware--------");
+        logger.error("Error in validateLoggedInUserMiddleware", {
+            error: err.message,
+        });
 
         res.status(500).json({
             isSuccess: false,
@@ -42,8 +57,6 @@ const validateLoggedInUserMiddleware = (req, res, next) => {
 
 const validateIsAdminMiddleware = (req, res, next) => {
     try {
-        console.log("-----🟢 inside validateIsAdminMiddleware-------");
-
         const { roles } = req.currentUser;
 
         if (roles && roles.includes(ROLE_OPTIONS.ADMIN)) {
@@ -56,7 +69,9 @@ const validateIsAdminMiddleware = (req, res, next) => {
             });
         }
     } catch (err) {
-        console.log("-----🔴 Error in validateIsAdminMiddleware--------");
+        logger.error("Error in validateIsAdminMiddleware", {
+            error: err.message,
+        });
 
         res.status(500).json({
             isSuccess: false,
@@ -67,8 +82,6 @@ const validateIsAdminMiddleware = (req, res, next) => {
 
 const validatePatientRole = (req, res, next) => {
     try {
-        console.log("-----🟢 inside validatePatientRole-------");
-
         const { roles } = req.currentUser;
 
         if (roles && roles.includes(ROLE_OPTIONS.PATIENT)) {
@@ -81,7 +94,9 @@ const validatePatientRole = (req, res, next) => {
             });
         }
     } catch (err) {
-        console.log("-----🔴 Error in validatePatientRole--------");
+        logger.error("Error in validatePatientRole", {
+            error: err.message,
+        });
 
         res.status(500).json({
             isSuccess: false,
@@ -92,8 +107,6 @@ const validatePatientRole = (req, res, next) => {
 
 const validatePatientOrAdminRole = (req, res, next) => {
     try {
-        console.log("-----🟢 inside validatePatientOrAdminRole-------");
-
         const { roles } = req.currentUser;
 
         if (
@@ -115,7 +128,9 @@ const validatePatientOrAdminRole = (req, res, next) => {
             message: "Patient or admin access only",
         });
     } catch (err) {
-        console.log("-----🔴 Error in validatePatientOrAdminRole--------");
+        logger.error("Error in validatePatientOrAdminRole", {
+            error: err.message,
+        });
 
         return res.status(500).json({
             isSuccess: false,
@@ -126,8 +141,6 @@ const validatePatientOrAdminRole = (req, res, next) => {
 
 const validateDoctorRole = (req, res, next) => {
     try {
-        console.log("-----🟢 inside validateDoctorRole-------");
-
         const { roles } = req.currentUser;
 
         if (roles && roles.includes(ROLE_OPTIONS.DOCTOR)) {
@@ -140,7 +153,9 @@ const validateDoctorRole = (req, res, next) => {
             });
         }
     } catch (err) {
-        console.log("-----🔴 Error in validateDoctorRole--------");
+        logger.error("Error in validateDoctorRole", {
+            error: err.message,
+        });
 
         res.status(500).json({
             isSuccess: false,

@@ -3,7 +3,6 @@ const jwt = require("jsonwebtoken");
 const { UserModel } = require("../../../models/userSchema");
 
 const signupUser = async ({ name, email, phone, gender, dob, password }) => {
-    console.log("-----🟢 inside signupUser-------");
     const newUser = await UserModel.create({
         name,
         email,
@@ -16,7 +15,6 @@ const signupUser = async ({ name, email, phone, gender, dob, password }) => {
 };
 
 const loginUser = async ({ email, password }) => {
-    console.log("-----🟢 inside loginUser-------");
     const userDoc = await UserModel.findOne({ email }).lean();
 
     if (!userDoc) {
@@ -43,22 +41,25 @@ const loginUser = async ({ email, password }) => {
             userId: userDoc._id,
             email: userDoc.email,
             roles: userDoc.roles,
+            mustChangePassword: userDoc.mustChangePassword,
         },
         process.env.JWT_SECRET,
         { expiresIn: "1d" },
     );
 
-    return { token, roles: userDoc.roles };
+    return {
+        token,
+        roles: userDoc.roles,
+        mustChangePassword: !!userDoc.mustChangePassword,
+    };
 };
 
 const checkEmailExists = async (email) => {
-    console.log("-----🟢 inside checkEmailExists-------");
     const user = await UserModel.findOne({ email });
     return !!user;
 };
 
 const forgotPassword = async (email) => {
-    console.log("-----🟢 inside forgotPassword-------");
     const user = await UserModel.findOne({ email });
     if (!user) {
         const err = new Error("No account found with this email");
@@ -71,7 +72,6 @@ const forgotPassword = async (email) => {
 };
 
 const resetPassword = async (email, newPassword) => {
-    console.log("-----🟢 inside resetPassword-------");
     const user = await UserModel.findOne({ email });
     if (!user) {
         const err = new Error("No account found with this email");
@@ -80,7 +80,38 @@ const resetPassword = async (email, newPassword) => {
     }
 
     user.password = newPassword;
+    user.mustChangePassword = false;
     await user.save(); // pre-save hook will hash the password
+
+    return { email: user.email };
+};
+
+const changePasswordForLoggedInUser = async (
+    userId,
+    currentPassword,
+    newPassword,
+) => {
+    const user = await UserModel.findById(userId);
+    if (!user) {
+        const err = new Error("User not found");
+        err.statusCode = 404;
+        throw err;
+    }
+
+    const isCurrentPasswordValid = await bcrypt.compare(
+        currentPassword.toString(),
+        user.password,
+    );
+
+    if (!isCurrentPasswordValid) {
+        const err = new Error("Current password is incorrect");
+        err.statusCode = 400;
+        throw err;
+    }
+
+    user.password = newPassword;
+    user.mustChangePassword = false;
+    await user.save();
 
     return { email: user.email };
 };
@@ -91,4 +122,5 @@ module.exports = {
     checkEmailExists,
     forgotPassword,
     resetPassword,
+    changePasswordForLoggedInUser,
 };

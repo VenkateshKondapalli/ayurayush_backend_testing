@@ -78,6 +78,11 @@ const userSchema = new Schema(
             type: Boolean,
             default: true,
         },
+
+        mustChangePassword: {
+            type: Boolean,
+            default: false,
+        },
     },
     {
         timestamps: true,
@@ -100,10 +105,11 @@ userSchema.pre("updateMany", function () {
     this.options.new = true;
 });
 
-userSchema.pre("save", async function () {
+userSchema.pre("save", async function (next) {
     if (this.isModified("password")) {
         this.password = await bcrypt.hash(this.password.toString(), 12);
     }
+    next();
 });
 
 const UserModel = model("user", userSchema);

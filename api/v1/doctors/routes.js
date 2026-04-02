@@ -12,6 +12,10 @@ const {
     getDoctorProfileController,
     updateDoctorProfileController,
 } = require("./controllers");
+const {
+    updateDoctorProfileValidator,
+    completeAppointmentValidator,
+} = require("./dto");
 
 const doctorsRouter = express.Router();
 
@@ -52,6 +56,7 @@ doctorsRouter.post(
     "/appointments/:appointmentId/complete",
     validateLoggedInUserMiddleware,
     validateDoctorRole,
+    completeAppointmentValidator,
     completeAppointmentController,
 );
 
@@ -68,6 +73,7 @@ doctorsRouter.put(
     "/profile",
     validateLoggedInUserMiddleware,
     validateDoctorRole,
+    updateDoctorProfileValidator,
     updateDoctorProfileController,
 );
 

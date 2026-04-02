@@ -4,12 +4,13 @@ const {
     checkEmailExists,
     forgotPassword,
     resetPassword,
+    changePasswordForLoggedInUser,
 } = require("./services");
 const { sendOtp } = require("../otps/services");
+const { UserModel } = require("../../../models/userSchema");
 
 const userSignupController = async (req, res, next) => {
     try {
-        console.log("-----🟢 inside userSignupController-------");
         const { name, email, phone, gender, dob, password } = req.body;
 
         const user = await signupUser({
@@ -27,18 +28,18 @@ const userSignupController = async (req, res, next) => {
             data: { user },
         });
     } catch (err) {
-        console.log("-----🔴 Error in userSignupController--------");
-        console.log(err.message);
         next(err);
     }
 };
 
 const userLoginController = async (req, res, next) => {
     try {
-        console.log("-----🟢 inside userLoginController-------");
         const { email, password } = req.body;
 
-        const { token, roles } = await loginUser({ email, password });
+        const { token, roles, mustChangePassword } = await loginUser({
+            email,
+            password,
+        });
 
         res.cookie("authorization", token, {
             httpOnly: true,
@@ -50,18 +51,15 @@ const userLoginController = async (req, res, next) => {
         res.status(200).json({
             isSuccess: true,
             message: "User logged in!",
-            data: { roles },
+            data: { roles, mustChangePassword },
         });
     } catch (err) {
-        console.log("-----🔴 Error in userLoginController--------");
-        console.log(err.message);
         next(err);
     }
 };
 
 const userLogoutController = async (req, res, next) => {
     try {
-        console.log("-----🟢 inside userLogoutController-------");
         res.cookie("authorization", "", {
             httpOnly: true,
             sameSite: "None",
@@ -74,44 +72,49 @@ const userLogoutController = async (req, res, next) => {
             message: "User logged out!",
         });
     } catch (err) {
-        console.log("-----🔴 Error in userLogoutController--------");
-        console.log(err.message);
         next(err);
     }
 };
 
-const getCurrentUserController = (req, res, next) => {
+const getCurrentUserController = async (req, res, next) => {
     try {
-        console.log("-----🟢 inside getCurrentUserController-------");
-        const { userId, roles } = req.currentUser;
+        const { userId } = req.currentUser;
+        const user = await UserModel.findById(userId).select(
+            "roles mustChangePassword",
+        );
+
+        if (!user) {
+            return res.status(404).json({
+                isSuccess: false,
+                message: "User not found",
+            });
+        }
 
         res.status(200).json({
             isSuccess: true,
-            data: { userId, roles },
+            data: {
+                userId,
+                roles: user.roles,
+                mustChangePassword: !!user.mustChangePassword,
+            },
         });
     } catch (err) {
-        console.log("-----🔴 Error in getCurrentUserController--------");
-        console.log(err.message);
         next(err);
     }
 };
 
 const checkEmailExistsController = async (req, res, next) => {
     try {
-        console.log("-----🟢 inside checkEmailExistsController-------");
         const { email } = req.query;
         const exists = await checkEmailExists(email);
         res.status(200).json({ exists });
     } catch (err) {
-        console.log("-----🔴 Error in checkEmailExistsController--------");
-        console.log(err.message);
         next(err);
     }
 };
 
 const forgotPasswordController = async (req, res, next) => {
     try {
-        console.log("-----🟢 inside forgotPasswordController-------");
         const { email } = req.body;
         await forgotPassword(email);
         const expiryMinutes = await sendOtp(email);
@@ -120,15 +123,12 @@ const forgotPasswordController = async (req, res, next) => {
             message: `OTP sent to ${email}. Valid for ${expiryMinutes} minutes.`,
         });
     } catch (err) {
-        console.log("-----🔴 Error in forgotPasswordController--------");
-        console.log(err.message);
         next(err);
     }
 };
 
 const resetPasswordController = async (req, res, next) => {
     try {
-        console.log("-----🟢 inside resetPasswordController-------");
         const { email, newPassword } = req.body;
         await resetPassword(email, newPassword);
         res.status(200).json({
@@ -137,8 +137,25 @@ const resetPasswordController = async (req, res, next) => {
                 "Password reset successfully. You can now login with your new password.",
         });
     } catch (err) {
-        console.log("-----🔴 Error in resetPasswordController--------");
-        console.log(err.message);
+        next(err);
+    }
+};
+
+const changePasswordController = async (req, res, next) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+
+        await changePasswordForLoggedInUser(
+            req.currentUser.userId,
+            currentPassword,
+            newPassword,
+        );
+
+        res.status(200).json({
+            isSuccess: true,
+            message: "Password updated successfully.",
+        });
+    } catch (err) {
         next(err);
     }
 };
@@ -151,4 +168,5 @@ module.exports = {
     checkEmailExistsController,
     forgotPasswordController,
     resetPasswordController,
+    changePasswordController,
 };

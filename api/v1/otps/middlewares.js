@@ -1,14 +1,13 @@
 const { OtpModel } = require("../../../models/otpSchema");
 const bcrypt = require("bcrypt");
+const logger = require("../../../utils/logger");
 
 const MAX_OTP_ATTEMPTS = 5;
 
 const validateOtpMiddleware = async (req, res, next) => {
     try {
-        console.log("-----🟢 inside validateOtpMiddleware-------");
-
         const { email, otp } = req.body;
-        console.log("🟡 : email:", email);
+        logger.debug("Validating OTP request");
 
         // Fetch the latest OTP for this email
         const otpDoc = await OtpModel.findOne({ email }).sort("-createdAt");
@@ -59,10 +58,9 @@ const validateOtpMiddleware = async (req, res, next) => {
 
         next();
     } catch (err) {
-        console.log(
-            "-----🔴 Error in validateOtpMiddleware--------",
-            err.message,
-        );
+        logger.error("Error in validateOtpMiddleware", {
+            error: err.message,
+        });
         next(err);
     }
 };
